@@ -268,12 +268,13 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
 <div class="ov" id="ovScan"><div class="sheet">
   <h2>📷 Scan foto invoice<button class="x" data-close>×</button></h2>
   <div id="scanPick">
-    <div class="tip" style="margin-top:0">Foto/screenshot rekap invoice (tabel tanggal · no invoice · nominal). Tiap baris jadi 1 catatan terpisah. Lo bakal ngecek dulu sebelum disimpan.<br><br>Tips: foto lurus, terang, nggak blur. Screenshot paling akurat.</div>
-    <button class="btn" id="scanChoose">Pilih / ambil foto</button>
-    <input type="file" id="scanFile" accept="image/*" hidden>
+    <div class="tip" style="margin-top:0">Foto/screenshot nota atau rekap invoice (tanggal · no invoice · nominal). Bisa pilih banyak foto sekaligus — tiap baris jadi 1 catatan terpisah. Lo bakal ngecek dulu sebelum disimpan.<br><br>Tips: foto lurus, terang, nggak blur. Screenshot paling akurat.</div>
+    <button class="btn" id="scanChoose">Pilih foto (bisa banyak sekaligus)</button>
+    <input type="file" id="scanFile" accept="image/*" multiple hidden>
   </div>
   <div id="scanBusy" hidden>
     <img id="scanImg" style="width:100%;border-radius:10px;border:1px solid var(--line);max-height:180px;object-fit:contain;background:#fff">
+    <div id="scanCount" style="text-align:center;font-weight:700;margin-top:8px"></div>
     <div class="prog"><i id="scanBar"></i></div>
     <div style="text-align:center;font-size:13px;color:var(--mute)" id="scanMsg">Menyiapkan…</div>
   </div>
@@ -298,7 +299,7 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='1.2 (scan foto)';
+const APP_VER='1.3 (scan banyak foto)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3}};
@@ -591,27 +592,39 @@ $('#scanHdr').onclick=openScan;
 $('#scanForm').onclick=()=>{$('#ovForm').classList.remove('on');openScan()};
 $('#scanChoose').onclick=()=>$('#scanFile').click();
 $('#sAgain').onclick=()=>{scanReset();$('#scanFile').click()};
+let scanCur={i:0,n:1};
 $('#scanFile').onchange=async e=>{
-  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const files=[...e.target.files];e.target.value='';if(!files.length)return;
   $('#scanPick').hidden=true;$('#scanBusy').hidden=false;$('#scanRes').hidden=true;
-  const url=URL.createObjectURL(f);$('#scanImg').src=url;
-  const bar=$('#scanBar'),msg=$('#scanMsg');bar.style.width='5%';
+  const bar=$('#scanBar'),msg=$('#scanMsg'),N=files.length;scanCur.n=N;
+  const all={rows:[],totals:[],judul:'',gagal:[]};
   try{
-    const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=url});
-    msg.textContent='Merapikan foto…';const cv=prepImage(img);bar.style.width='12%';
-    msg.textContent='Memuat pembaca teks… (pertama kali butuh internet)';
+    msg.textContent='Memuat pembaca teks… (pertama kali butuh internet)';bar.style.width='3%';
     await loadTess();
-    if(!ocrWorker){ocrWorker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text'){bar.style.width=(20+m.progress*80)+'%';msg.textContent='Membaca angka… '+Math.round(m.progress*100)+'%'}}});await ocrWorker.setParameters({tessedit_pageseg_mode:'6'})}
-    const {data}=await ocrWorker.recognize(cv);
-    window._lastOCR=data.text;const r=parseOCR(data.text);
-    if(!r.rows.length){toast('Nggak nemu baris invoice. Coba foto lebih jelas.');scanReset();return}
-    showScanRes(r);
+    if(!ocrWorker){ocrWorker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text'){const p=(scanCur.i+m.progress)/scanCur.n;bar.style.width=(5+p*95)+'%';msg.textContent='Membaca angka… '+Math.round(m.progress*100)+'%'}}});await ocrWorker.setParameters({tessedit_pageseg_mode:'6'})}
+    for(let k=0;k<N;k++){
+      scanCur.i=k;$('#scanCount').textContent=N>1?`Foto ${k+1} dari ${N}`:'';
+      const url=URL.createObjectURL(files[k]);$('#scanImg').src=url;
+      try{
+        const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=url});
+        msg.textContent='Merapikan foto…';
+        const {data}=await ocrWorker.recognize(prepImage(img));
+        window._lastOCR=data.text;const r=parseOCR(data.text);
+        if(!r.rows.length)all.gagal.push(k+1);
+        r.rows.forEach(x=>{x.foto=k+1;all.rows.push(x)});
+        all.totals.push({foto:k+1,total:r.total,sum:r2(r.rows.reduce((a,x)=>a+x.nominal,0)),n:r.rows.length});
+        if(!all.judul&&r.judul)all.judul=r.judul;
+      }catch(er){all.gagal.push(k+1)}
+      URL.revokeObjectURL(url);
+    }
+    if(!all.rows.length){toast('Nggak nemu baris invoice. Coba foto lebih jelas.');scanReset();return}
+    showScanRes(all);
   }catch(err){toast(err&&err.message==='net'?'Butuh internet buat scan pertama kali':'Gagal baca foto, coba lagi');scanReset()}
 };
 function showScanRes(r){
   const last=S.items.filter(i=>i.tipe==='hutang'&&i.kat==='bisnis').sort((a,b)=>b.dibuat-a.dibuat)[0];
-  SC={rows:r.rows,total:r.total,judul:r.judul,tipe:'hutang',kat:'bisnis',hari:+($('#sHari').value)||30};
-  SC.rows.forEach(x=>{x.dup=!!(x.no&&S.items.some(i=>i.noInv&&i.noInv.toLowerCase()===x.no.toLowerCase()));if(x.dup)x.on=false});
+  SC={rows:r.rows,totals:r.totals,gagal:r.gagal,judul:r.judul,tipe:'hutang',kat:'bisnis',hari:+($('#sHari').value)||30};
+  const seen=new Set();SC.rows.forEach(x=>{const k=(x.no||'').toLowerCase();x.dup=!!(k&&S.items.some(i=>i.noInv&&i.noInv.toLowerCase()===k));x.dupB=!!(k&&!x.dup&&seen.has(k));if(k)seen.add(k);if(x.dup||x.dupB)x.on=false});
   segVal('sTipe','hutang');segVal('sKat','bisnis');
   $('#sPihak').value=last?last.pihak:'';
   $('#dlPihak2').innerHTML=[...new Set(S.items.map(i=>i.pihak))].map(n=>`<option value="${esc(n)}">`).join('');
@@ -625,24 +638,29 @@ function tempoChip(){$$('#sTempo .chip').forEach(c=>c.classList.toggle('on',+c.d
 $$('#sTempo .chip').forEach(c=>c.onclick=()=>{$('#sHari').value=c.dataset.d;SC.hari=+c.dataset.d;tempoChip()});
 $('#sHari').oninput=e=>{SC.hari=num(e.target.value);tempoChip()};
 function drawRows(){
-  $('#sRows').innerHTML=SC.rows.map((x,i)=>`<div class="srow ${x.on?'':'off'}"><div class="top"><input type="checkbox" data-i="${i}" data-k="on" ${x.on?'checked':''}><b style="flex:1">#${i+1}</b>${x.dup?'<span class="warn">Sudah pernah dicatat</span>':''}<button class="del" data-rm="${i}">×</button></div>
+  $('#sRows').innerHTML=SC.rows.map((x,i)=>`<div class="srow ${x.on?'':'off'}"><div class="top"><input type="checkbox" data-i="${i}" data-k="on" ${x.on?'checked':''}><b style="flex:1">#${i+1}${SC.totals.length>1&&x.foto?` <span style="font-weight:500;color:var(--mute);font-size:12px">· foto ${x.foto}</span>`:''}</b>${x.dup?'<span class="warn">Sudah pernah dicatat</span>':x.dupB?'<span class="warn">Dobel di foto lain</span>':''}<button class="del" data-rm="${i}">×</button></div>
   <div class="g"><input class="f" type="date" data-i="${i}" data-k="tgl" value="${x.tgl}"><input class="f" data-i="${i}" data-k="no" value="${esc(x.no)}" placeholder="No invoice">
   <input class="f" data-i="${i}" data-k="nominal" inputmode="decimal" value="${x.nominal?fmt(x.nominal):''}" placeholder="Nominal"><input class="f" data-i="${i}" data-k="ket" value="${esc(x.ket)}" placeholder="Ket (Parfum/Botol)"></div></div>`).join('');
   updScanSum();
 }
 function updScanSum(){
-  const on=SC.rows.filter(x=>x.on),sum=r2(on.reduce((a,x)=>a+x.nominal,0)),all=r2(SC.rows.reduce((a,x)=>a+x.nominal,0));
-  let h=`<div class="chk ${SC.total&&Math.abs(all-SC.total)<0.01?'ok':'no'}">Kebaca ${SC.rows.length} baris · jumlah ${rp(all)}`;
-  if(SC.total)h+=Math.abs(all-SC.total)<0.01?'<br>✅ Cocok dengan TOTAL di foto':`<br>⚠️ TOTAL di foto ${rp(SC.total)} — selisih ${rp(Math.abs(SC.total-all))}. Cek angka yang salah baca.`;
-  else h+='<br>⚠️ Baris TOTAL nggak ketemu, cek manual tiap nominal ya.';
-  $('#scanCheck').innerHTML=h+'</div>';
+  const on=SC.rows.filter(x=>x.on),sum=r2(on.reduce((a,x)=>a+x.nominal,0));
+  const lines=SC.totals.map(t=>{
+    const cur=r2(SC.rows.filter(x=>x.foto===t.foto).reduce((a,x)=>a+x.nominal,0)),n=SC.rows.filter(x=>x.foto===t.foto).length;
+    const pre=SC.totals.length>1?`Foto ${t.foto}: `:'';
+    if(!n)return{ok:false,t:`${pre}⚠️ nggak ada baris kebaca`};
+    if(!t.total)return{ok:false,t:`${pre}${n} baris · ${rp(cur)} — ⚠️ baris TOTAL nggak ada, cek manual`};
+    return Math.abs(cur-t.total)<0.01?{ok:true,t:`${pre}${n} baris · ${rp(cur)} ✅ cocok TOTAL`}:{ok:false,t:`${pre}${n} baris · ${rp(cur)} ⚠️ TOTAL di foto ${rp(t.total)}, selisih ${rp(Math.abs(t.total-cur))}`};
+  });
+  const allOk=lines.length&&lines.every(l=>l.ok);
+  $('#scanCheck').innerHTML=`<div class="chk ${allOk?'ok':'no'}">${lines.map(l=>l.t).join('<br>')}</div>`;
   $('#sSave').textContent=`Simpan ${on.length} catatan (${rp(sum)})`;
 }
 $('#sRows').addEventListener('input',e=>{const t=e.target,i=+t.dataset.i,k=t.dataset.k;if(k===undefined)return;const x=SC.rows[i];
   if(k==='on'){x.on=t.checked;t.closest('.srow').classList.toggle('off',!x.on)}else if(k==='nominal')x.nominal=r2(parseAmt(t.value));else x[k]=t.value;updScanSum()});
 $('#sRows').addEventListener('focusout',e=>{const t=e.target;if(t.dataset.k==='nominal'){const x=SC.rows[+t.dataset.i];t.value=x.nominal?fmt(x.nominal):''}});
 $('#sRows').addEventListener('click',e=>{const r=e.target.dataset.rm;if(r!==undefined){SC.rows.splice(+r,1);drawRows()}});
-$('#sAdd').onclick=()=>{SC.rows.push({tgl:today(),no:'',nominal:0,ket:'',on:true});drawRows()};
+$('#sAdd').onclick=()=>{SC.rows.push({tgl:today(),no:'',nominal:0,ket:'',on:true,foto:0});drawRows()};
 $('#sSave').onclick=()=>{
   const pihak=$('#sPihak').value.trim();if(!pihak)return toast('Isi nama '+(SC.tipe==='hutang'?'supplier':'pelanggan')+' dulu');
   const on=SC.rows.filter(x=>x.on);if(!on.length)return toast('Nggak ada baris yang dicentang');
