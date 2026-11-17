@@ -425,7 +425,7 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='2.3 (draft & offline)';
+const APP_VER='2.4 (perbaikan PDF)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3}};
@@ -803,9 +803,9 @@ async function pdfInvoice(it){
   const body=rinci?it.baris.filter(b=>b.nama).map((b,k)=>[k+1,b.nama,(+b.qty).toLocaleString('id-ID',{maximumFractionDigits:3}),rp(b.harga),rp(b.qty*b.harga)]):[[1,it.rincianTxt||it.catatan||'Pembelian',1,rp(total(it)),rp(total(it))]];
   doc.autoTable({startY:y+17,head:[['No','Barang','Qty','Harga','Subtotal']],body,theme:'grid',styles:{fontSize:9.5,cellPadding:2.4,lineColor:PDFC.line,textColor:[29,43,43]},headStyles:{fillColor:[242,238,229],textColor:[29,43,43],fontStyle:'bold'},didParseCell:d=>{if(d.section==='head'&&d.column.index>=2)d.cell.styles.halign='right'},columnStyles:{0:{cellWidth:11,halign:'center'},2:{cellWidth:18,halign:'right'},3:{cellWidth:32,halign:'right'},4:{cellWidth:36,halign:'right'}},margin:{left:14,right:14}});
   y=doc.lastAutoTable.finalY+7;
-  const row=(l,v,b,col)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(b?12:10);if(col)doc.setTextColor(...col);doc.text(l,140,y);doc.text(v,W-14,y,{align:'right'});doc.setTextColor(29,43,43);y+=b?8:6};
+  const row=(l,v,b,col)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(b?12:10);if(col)doc.setTextColor(...col);const vw=doc.getTextWidth(v);doc.text(v,W-14,y,{align:'right'});doc.text(l,W-14-vw-8,y,{align:'right'});doc.setTextColor(29,43,43);y+=b?8:6};
   row('Total',rp(total(it)));if(dibayar(it))row('Sudah dibayar','- '+rp(dibayar(it)),false,PDFC.grn);
-  doc.setDrawColor(...PDFC.line);doc.line(140,y-3,W-14,y-3);y+=2;row('SISA TAGIHAN',rp(sisa(it)),true,sisa(it)?PDFC.red:PDFC.grn);
+  doc.setDrawColor(...PDFC.line);doc.line(W-110,y-3,W-14,y-3);y+=2;row('SISA TAGIHAN',rp(sisa(it)),true,sisa(it)?PDFC.red:PDFC.grn);
   stamp(doc,W-14,y+6,sisa(it)<=0);
   let y2=pdfPayInfo(doc,y+2);
   if(it.bayar.length){y2+=4;doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text('Riwayat pembayaran:',14,y2);doc.setFont('helvetica','normal');it.bayar.forEach(b=>{y2+=4.5;doc.text(`${tglId(b.tgl)}  ${rp(b.jumlah)}${b.ket?'  ('+b.ket+')':''}`,14,y2)})}
