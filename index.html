@@ -193,6 +193,8 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
       <input type="file" id="bkFile" accept=".json" hidden>
       <div class="tip">Data disimpan di HP ini aja. Ekspor backup rutin (misal tiap minggu) dan simpan di Drive/WA biar nggak hilang kalau cache browser kehapus atau ganti HP.</div>
     </div>
+    <div class="sec">Versi apk</div>
+    <div class="dcard"><div class="kv"><span>Versi</span><b id="verTxt"></b></div><button class="btn o" id="forceUpd" style="margin-top:8px">🔄 Cek & muat ulang versi terbaru</button></div>
     <div class="sec">Notifikasi ikon</div>
     <div class="dcard">
       <button class="btn o" id="nPerm" style="margin-top:0">Izinkan angka di ikon apk</button>
@@ -653,10 +655,16 @@ $('#sSave').onclick=()=>{
 
 /* ===== Init ===== */
 $('#today').textContent=new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+$('#verTxt').textContent=APP_VER;
+$('#forceUpd').onclick=async()=>{toast('Memuat ulang…');try{const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));const rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(r=>r.update()))}catch(e){}location.reload()};
 fillCfg();badgeInfo();render();
 setTimeout(()=>showNotif(false),500);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();showNotif(false)}});
-if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+const APP_VER='1.2 (scan foto)';
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{});
+  let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;location.reload()});
+}
 </script>
 </body>
 </html>

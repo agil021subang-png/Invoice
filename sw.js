@@ -1,4 +1,4 @@
-const CACHE = 'abw-tagihan-v3';
+const CACHE = 'abw-tagihan-v4';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -12,7 +12,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const isPage = e.request.mode === 'navigate';
   if (isPage) {
-    e.respondWith(fetch(e.request).then(res => {
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
       const copy = res.clone(); caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
       return res;
     }).catch(() => caches.match('./index.html')));
