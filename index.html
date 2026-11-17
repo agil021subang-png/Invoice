@@ -322,7 +322,10 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
 <div class="ov" id="ovInv"><div class="sheet">
   <h2 class="noprint">Invoice<button class="x" data-close>×</button></h2>
   <div id="invPrint"></div>
-  <div class="btns noprint"><button class="btn" id="invPrintBtn">🖨 Simpan PDF / Cetak</button><button class="btn g" id="invWaBtn">Kirim WA</button></div>
+  <button class="btn g noprint" id="invShare">📤 Kirim PDF ke pelanggan</button>
+  <div class="btns noprint"><button class="btn o" id="invSave">⬇ Simpan PDF</button><button class="btn o" id="invWaBtn">💬 Pesan WA</button></div>
+  <button class="add noprint" id="invPrintBtn" style="display:block;margin:10px auto 0">🖨 Cetak langsung (printer)</button>
+  <div class="tip noprint" id="invCfgTip" hidden>Lengkapi alamat, no WA & rekening toko di menu <b>Atur</b> biar muncul di invoice.</div>
 </div></div>
 
 <!-- Modal: scan -->
@@ -378,7 +381,7 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='1.9 (cari pintar)';
+const APP_VER='2.0 (invoice PDF & rekap tagihan)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3}};
@@ -610,6 +613,7 @@ function openDet(id){
   ${sisa(it)?`<button class="btn g" id="dPay">💰 ${p?'Terima':'Catat'} pembayaran</button>`:''}
   <div class="btns">
     ${p?`<button class="btn o" id="dInv">📄 Invoice</button>`:''}
+    ${p&&S.items.some(x=>x.tipe==='piutang'&&x.pihak===it.pihak&&sisa(x)>0)?`<button class="btn o" id="dRekap">📑 Rekap tagihan</button>`:''}
     ${p&&sisa(it)&&it.wa?`<button class="btn o" id="dTagih">💬 Tagih via WA</button>`:''}
     ${!p&&it.wa&&sisa(it)?`<button class="btn o" id="dChat">💬 Chat ${it.kat==='pribadi'?'orangnya':'supplier'}</button>`:''}
     <button class="btn o" id="dEdit">✏️ Edit</button>
@@ -617,7 +621,7 @@ function openDet(id){
   </div>`;
   open('#ovDet');
   const on=(sel,fn)=>{const e=$(sel);if(e)e.onclick=fn};
-  on('#dPay',openPay);on('#dInv',()=>openInv(it));on('#dTagih',()=>waTagih(it));
+  on('#dPay',openPay);on('#dInv',()=>openInv(it));on('#dRekap',()=>sendRekap(it.pihak));on('#dTagih',()=>waTagih(it));
   on('#dChat',()=>window.open(waLink(it.wa,''),'_blank'));
   on('#dEdit',()=>{$('#ovDet').classList.remove('on');openForm(it)});
   on('#dDel',()=>{if(confirmDel(it)){S.items=S.items.filter(x=>x.id!==it.id);save();render();$('#ovDet').classList.remove('on');toast('Dihapus')}});
@@ -662,9 +666,75 @@ function openInv(it){
   <div style="text-align:center;font-size:11px;color:#999;margin-top:16px">Terima kasih telah berbelanja 🙏</div>`;
   $('#invWaBtn').style.display=it.wa?'block':'none';
   $('#invWaBtn').onclick=()=>waTagih(it);
+  $('#invShare').onclick=()=>sharePdf(()=>pdfInvoice(it),fileSafe('Invoice '+it.noInv+' '+it.pihak),waMsgInv(it));
+  $('#invSave').onclick=()=>savePdf(()=>pdfInvoice(it),fileSafe('Invoice '+it.noInv+' '+it.pihak));
+  $('#invCfgTip').hidden=!!(c.alamat&&c.wa&&c.bayar);
   open('#ovInv');
 }
 $('#invPrintBtn').onclick=()=>window.print();
+
+/* ===== PDF penagihan ===== */
+const JSPDF='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',AUTOT='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+async function loadJsPdf(){await loadScript(JSPDF,()=>window.jspdf);await loadScript(AUTOT,()=>window.jspdf.jsPDF.API.autoTable)}
+const fileSafe=s=>String(s).replace(/[\/\\:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim().slice(0,80)+'.pdf';
+const PDFC={pri:[15,61,62],gold:[224,164,59],red:[194,65,45],grn:[47,125,79],mute:[107,118,118],line:[230,224,211]};
+function pdfHead(doc,title,sub){
+  const c=S.cfg,W=doc.internal.pageSize.getWidth();
+  doc.setFillColor(...PDFC.pri);doc.rect(0,0,W,30,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(17);doc.text(c.nama||'Albarokah Wangi',14,13);
+  doc.setFont('helvetica','normal');doc.setFontSize(8.5);const info=[c.alamat,c.wa?'WA '+c.wa:''].filter(Boolean).join('  ·  ');if(info)doc.text(doc.splitTextToSize(info,110),14,19.5);
+  doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text(title,W-14,13,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);if(sub)doc.text(sub,W-14,19.5,{align:'right'});
+  doc.setFillColor(...PDFC.gold);doc.rect(0,30,W,1.4,'F');doc.setTextColor(29,43,43);return 40;
+}
+function pdfPayInfo(doc,y){const c=S.cfg;if(!c.bayar)return y;doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.text('Pembayaran ke:',14,y);doc.setFont('helvetica','normal');const L=doc.splitTextToSize(c.bayar,100);doc.text(L,14,y+5);return y+5+L.length*4.5}
+function pdfFoot(doc){const H=doc.internal.pageSize.getHeight(),W=doc.internal.pageSize.getWidth(),n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(7.5);doc.setTextColor(...PDFC.mute);doc.text('Dibuat '+tglId(today())+' · '+(S.cfg.nama||'')+(n>1?`  ·  hal ${i}/${n}`:''),W/2,H-8,{align:'center'})}}
+function stamp(doc,x,y,lunas){doc.setDrawColor(...(lunas?PDFC.grn:PDFC.red));doc.setTextColor(...(lunas?PDFC.grn:PDFC.red));doc.setLineWidth(.8);doc.setFont('helvetica','bold');doc.setFontSize(12);const t=lunas?'LUNAS':'BELUM LUNAS',w=doc.getTextWidth(t)+8;doc.roundedRect(x-w,y-6,w,9,1.5,1.5);doc.text(t,x-w/2,y+.6,{align:'center'});doc.setTextColor(29,43,43);doc.setLineWidth(.2)}
+async function pdfInvoice(it){
+  await loadJsPdf();const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'}),W=doc.internal.pageSize.getWidth();
+  let y=pdfHead(doc,'INVOICE',it.noInv||'');
+  doc.setFontSize(8.5);doc.setTextColor(...PDFC.mute);doc.text('KEPADA',14,y);doc.text('TANGGAL',120,y);doc.text('JATUH TEMPO',160,y);
+  doc.setTextColor(29,43,43);doc.setFont('helvetica','bold');doc.setFontSize(11.5);doc.text(doc.splitTextToSize(it.pihak,100),14,y+6);
+  doc.setFontSize(10);doc.text(tglId(it.tgl),120,y+6);const st=status(it);if(st.k==='telat')doc.setTextColor(...PDFC.red);doc.text(tglId(it.jt),160,y+6);doc.setTextColor(29,43,43);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);if(it.wa)doc.text(it.wa,14,y+11.5);
+  const rinci=it.mode==='rinci'&&it.baris.some(b=>b.nama);
+  const body=rinci?it.baris.filter(b=>b.nama).map((b,k)=>[k+1,b.nama,(+b.qty).toLocaleString('id-ID',{maximumFractionDigits:3}),rp(b.harga),rp(b.qty*b.harga)]):[[1,it.rincianTxt||it.catatan||'Pembelian',1,rp(total(it)),rp(total(it))]];
+  doc.autoTable({startY:y+17,head:[['No','Barang','Qty','Harga','Subtotal']],body,theme:'grid',styles:{fontSize:9.5,cellPadding:2.4,lineColor:PDFC.line,textColor:[29,43,43]},headStyles:{fillColor:[242,238,229],textColor:[29,43,43],fontStyle:'bold'},didParseCell:d=>{if(d.section==='head'&&d.column.index>=2)d.cell.styles.halign='right'},columnStyles:{0:{cellWidth:11,halign:'center'},2:{cellWidth:18,halign:'right'},3:{cellWidth:32,halign:'right'},4:{cellWidth:36,halign:'right'}},margin:{left:14,right:14}});
+  y=doc.lastAutoTable.finalY+7;
+  const row=(l,v,b,col)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(b?12:10);if(col)doc.setTextColor(...col);doc.text(l,140,y);doc.text(v,W-14,y,{align:'right'});doc.setTextColor(29,43,43);y+=b?8:6};
+  row('Total',rp(total(it)));if(dibayar(it))row('Sudah dibayar','- '+rp(dibayar(it)),false,PDFC.grn);
+  doc.setDrawColor(...PDFC.line);doc.line(140,y-3,W-14,y-3);y+=2;row('SISA TAGIHAN',rp(sisa(it)),true,sisa(it)?PDFC.red:PDFC.grn);
+  stamp(doc,W-14,y+6,sisa(it)<=0);
+  let y2=pdfPayInfo(doc,y+2);
+  if(it.bayar.length){y2+=4;doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text('Riwayat pembayaran:',14,y2);doc.setFont('helvetica','normal');it.bayar.forEach(b=>{y2+=4.5;doc.text(`${tglId(b.tgl)}  ${rp(b.jumlah)}${b.ket?'  ('+b.ket+')':''}`,14,y2)})}
+  doc.setFontSize(9.5);doc.setTextColor(...PDFC.mute);doc.text('Terima kasih atas kepercayaan Anda.',W/2,Math.max(y2,y+12)+16,{align:'center'});
+  pdfFoot(doc);return doc;
+}
+async function pdfRekap(pihak){
+  await loadJsPdf();const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'}),W=doc.internal.pageSize.getWidth();
+  const list=S.items.filter(i=>i.tipe==='piutang'&&i.pihak===pihak&&sisa(i)>0).sort((a,b)=>(a.jt||a.tgl).localeCompare(b.jt||b.tgl));
+  let y=pdfHead(doc,'REKAP TAGIHAN','Per '+tglId(today()));
+  doc.setFontSize(8.5);doc.setTextColor(...PDFC.mute);doc.text('KEPADA',14,y);doc.setTextColor(29,43,43);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(pihak,14,y+6);
+  const wa=(list.find(i=>i.wa)||{}).wa;doc.setFont('helvetica','normal');doc.setFontSize(9);if(wa)doc.text(wa,14,y+11.5);
+  const tot=r2(list.reduce((a,i)=>a+sisa(i),0)),telat=list.filter(i=>status(i).k==='telat');
+  doc.autoTable({startY:y+17,head:[['No','Tanggal','No. Invoice','Jatuh tempo','Total','Dibayar','Sisa']],body:list.map((i,k)=>[k+1,tglId(i.tgl),i.noInv||'-',tglId(i.jt)+(status(i).k==='telat'?'\n(lewat '+(-diff(i.jt))+' hr)':''),rp(total(i)),dibayar(i)?rp(dibayar(i)):'-',rp(sisa(i))]),
+    foot:[['','','','','','TOTAL',rp(tot)]],theme:'grid',styles:{fontSize:8.8,cellPadding:2.2,lineColor:PDFC.line,textColor:[29,43,43]},headStyles:{fillColor:[242,238,229],textColor:[29,43,43],fontStyle:'bold'},footStyles:{fillColor:PDFC.pri,textColor:[255,255,255],fontStyle:'bold',halign:'right'},
+    columnStyles:{0:{cellWidth:9,halign:'center'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right',fontStyle:'bold'}},
+    didParseCell:d=>{if(d.section==='head'&&d.column.index>=4)d.cell.styles.halign='right';if(d.section==='body'&&d.column.index===3&&String(d.cell.raw).includes('lewat'))d.cell.styles.textColor=PDFC.red},margin:{left:14,right:14}});
+  y=doc.lastAutoTable.finalY+8;doc.setFontSize(10);
+  doc.text(doc.splitTextToSize(`Mohon pembayaran sebesar ${rp(tot)} untuk ${list.length} invoice di atas`+(telat.length?`, ${telat.length} di antaranya sudah lewat jatuh tempo.`:'.'),W-28),14,y);
+  pdfPayInfo(doc,y+12);pdfFoot(doc);return{doc,tot,n:list.length};
+}
+function waMsgInv(it){return `Assalamu'alaikum ${it.pihak} 🙏\nBerikut invoice ${it.noInv} dari ${S.cfg.nama}.\nSisa tagihan: *${rp(sisa(it))}* · jatuh tempo ${tglId(it.jt)}.\nTerima kasih.`}
+async function sharePdf(make,name,text){
+  toast('Membuat PDF…');let doc;try{doc=await make()}catch(e){return toast(e&&e.message==='net'?'Butuh internet sekali buat bikin PDF pertama':'Gagal bikin PDF')}
+  if(doc.doc)doc=doc.doc;const file=new File([doc.output('blob')],name,{type:'application/pdf'});
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],text});return}}catch(e){if(e&&e.name==='AbortError')return}
+  doc.save(name);toast('PDF diunduh — kirim manual lewat WA');
+}
+async function savePdf(make,name){toast('Membuat PDF…');try{let d=await make();if(d.doc)d=d.doc;d.save(name);toast('PDF disimpan ✓')}catch(e){toast(e&&e.message==='net'?'Butuh internet sekali buat bikin PDF pertama':'Gagal bikin PDF')}}
+function sendRekap(pihak){const list=S.items.filter(i=>i.tipe==='piutang'&&i.pihak===pihak&&sisa(i)>0),tot=r2(list.reduce((a,i)=>a+sisa(i),0));
+  sharePdf(()=>pdfRekap(pihak),fileSafe('Rekap tagihan '+pihak+' '+today()),`Assalamu'alaikum ${pihak} 🙏\nBerikut rekap ${list.length} tagihan dari ${S.cfg.nama}, total *${rp(tot)}*.\nTerima kasih.`)}
 
 /* ===== Laporan ===== */
 let lapYM=today().slice(0,7);
