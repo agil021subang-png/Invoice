@@ -58,11 +58,12 @@ main{padding:14px;max-width:640px;margin:0 auto}
 .seg button.on{background:var(--card);color:var(--pri);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .search{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);margin-bottom:10px;outline:none}
 .search:focus{border-color:var(--pri2)}
-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px max(6px,env(safe-area-inset-bottom));z-index:20}
+html{overscroll-behavior-y:none}body{overscroll-behavior-y:none}
+nav{-webkit-transform:translateZ(0);transform:translateZ(0);position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px max(6px,env(safe-area-inset-bottom));z-index:20}
 nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--mute);padding:6px 0}
 nav button svg{width:22px;height:22px}
 nav button.on{color:var(--pri)}
-.fab{position:fixed;right:18px;bottom:84px;width:56px;height:56px;border-radius:18px;background:var(--gold);color:var(--pri);display:grid;place-items:center;box-shadow:0 6px 18px rgba(15,61,62,.3);z-index:21}
+.fab{-webkit-transform:translateZ(0);transform:translateZ(0);position:fixed;right:18px;bottom:84px;width:56px;height:56px;border-radius:18px;background:var(--gold);color:var(--pri);display:grid;place-items:center;box-shadow:0 6px 18px rgba(15,61,62,.3);z-index:21}
 .fab svg{width:26px;height:26px}
 /* modal */
 .ov{position:fixed;inset:0;background:rgba(10,25,25,.5);z-index:50;display:none;align-items:flex-end;justify-content:center}
@@ -270,8 +271,8 @@ nav button{min-width:0}
   <!-- HUTANG -->
   <section class="tab" id="t-hut">
     <input class="search" id="qHut" placeholder="Cari supplier / no / barang / nominal…">
-    <div class="seg" id="vHut"><button data-v="nota" class="on">Per nota</button><button data-v="org">Per supplier</button></div>
-    <div class="seg" id="kHut">
+    <div class="seg" id="vHut" hidden><button data-v="nota" class="on">Per nota</button><button data-v="org">Per supplier</button></div>
+    <div class="seg" id="kHut" hidden>
       <button data-k="semua" class="on">Semua</button><button data-k="bisnis">Supplier / Bisnis</button><button data-k="pribadi">Pribadi</button>
     </div>
     <div class="seg" id="fHut">
@@ -404,7 +405,7 @@ nav button{min-width:0}
   <div class="sv2"><button class="btn o" id="fDraft">Simpan draft</button><button class="btn" id="fSave">Simpan</button></div>
   <button class="more" id="moreBtn"><span id="moreTxt">Tambah detail</span> <small>(no nota, kategori, WA, tanggal, catatan)</small> <b id="moreIc">▾</b></button>
   <div id="moreBox" hidden>
-    <div class="seg" id="fKat"><button data-v="bisnis" class="on">Bisnis</button><button data-v="pribadi">Pribadi</button></div>
+    <div class="seg" id="fKat" hidden><button data-v="bisnis" class="on">Bisnis</button><button data-v="pribadi">Pribadi</button></div>
     <div class="row">
       <div><label id="lNo">No. nota supplier</label><input class="f" id="fNo" autocomplete="off" placeholder="opsional"></div>
       <div><label>Kategori</label><input class="f" id="fKatg" list="dlKatg" autocomplete="off" placeholder="Parfum / Botol"><datalist id="dlKatg"></datalist></div>
@@ -467,7 +468,7 @@ nav button{min-width:0}
   <div id="scanRes" hidden>
     <div id="scanCheck"></div>
     <div class="seg" id="sTipe"><button data-v="hutang" class="on">Hutang gw</button><button data-v="piutang">Piutang</button></div>
-    <div class="seg" id="sKat"><button data-v="bisnis" class="on">Bisnis</button><button data-v="pribadi">Pribadi</button></div>
+    <div class="seg" id="sKat" hidden><button data-v="bisnis" class="on">Bisnis</button><button data-v="pribadi">Pribadi</button></div>
     <label id="sPihakL">Nama supplier (dari siapa tagihan ini)</label>
     <input class="f" id="sPihak" list="dlPihak2" autocomplete="off" placeholder="mis. Sumber Wangi Semarang"><datalist id="dlPihak2"></datalist>
     <div class="chips" id="sJudul"></div>
@@ -528,7 +529,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.1 (tab riwayat)';
+const APP_VER='4.2 (hutang per supplier, tanpa pribadi)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -695,7 +696,7 @@ function card(it){
     <span class="pill st-${s.k}">${s.t}</span></div></button>`;
 }
 const emp=t=>`<div class="empty">${t}</div>`;
-let fPiu='belum',fHut='belum',kHut='semua',vPiu='nota',vHut='nota';
+let fPiu='belum',fHut='belum',kHut='semua',vPiu='nota',vHut='org';
 function filt(arr,f){return arr.filter(it=>{const s=status(it).k;return f==='semua'||(f==='lunas'?s==='lunas':f==='telat'?s==='telat':s!=='lunas')})}
 function sortDue(arr){return arr.sort((a,b)=>{const la=sisa(a)<=0,lb=sisa(b)<=0;if(la!==lb)return la?1:-1;return(a.jt||'9').localeCompare(b.jt||'9')})}
 function render(){
@@ -1606,6 +1607,12 @@ if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
   navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{});
   const hadCtrl=!!navigator.serviceWorker.controller;let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadCtrl||reloaded)return;if($('#ovForm').classList.contains('on'))saveDraft(true);reloaded=true;location.reload()});
 }
+</script>
+<script>
+/* iOS PWA: navbar bawah kadang nyangkut di tengah layar (setelah keyboard/scroll) -> paksa posisi ulang */
+(function(){const fix=()=>requestAnimationFrame(()=>{const n=document.querySelector('nav');if(!n)return;n.style.bottom='1px';void n.offsetHeight;n.style.bottom='';window.scrollTo(window.scrollX,window.scrollY)});
+document.addEventListener('focusout',()=>setTimeout(fix,60));if(window.visualViewport)visualViewport.addEventListener('resize',fix);window.addEventListener('orientationchange',()=>setTimeout(fix,300));document.addEventListener('visibilitychange',fix);
+document.addEventListener('click',e=>{if(e.target.closest('nav button'))setTimeout(fix,30)})})();
 </script>
 </body>
 </html>
