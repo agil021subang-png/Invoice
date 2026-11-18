@@ -1,4 +1,4 @@
-const CACHE = 'abw-tagihan-v24';
+const CACHE = 'abw-tagihan-v25';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
