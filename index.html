@@ -168,11 +168,12 @@ label{display:block;font-size:12px;font-weight:700;color:var(--mute);margin:12px
 body.locked .lock{display:flex}
 body.locked>*:not(.lock):not(.toast){visibility:hidden}
 .lock h3{font-size:20px;margin:10px 0 4px}.lock p{font-size:13px;opacity:.75;min-height:18px;text-align:center}
-.dots{display:flex;gap:14px;margin:22px 0 26px}.dots i{width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,.7)}.dots i.f{background:#fff;border-color:#fff}
+.dots{display:flex;gap:16px;margin:22px 0 26px;height:18px;align-items:center}.dots i{display:block;flex:0 0 16px;width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:2px solid rgba(255,255,255,.7);font-style:normal}.dots i.dot-on{background:#fff;border-color:#fff}
 .dots.shake{animation:shk .35s}@keyframes shk{20%,60%{transform:translateX(-9px)}40%,80%{transform:translateX(9px)}}
 .kp{display:grid;grid-template-columns:repeat(3,76px);gap:14px}
 .kp button{width:76px;height:76px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:28px;font-weight:600}
-.kp button:active{background:rgba(255,255,255,.3)}.kp button.t{background:none;font-size:14px;font-weight:700}
+.kp button:active{background:rgba(255,255,255,.3)}.kp button.t{background:rgba(255,255,255,.06);font-size:16px;font-weight:700;border:1.5px solid rgba(255,255,255,.25)}
+.kp button.t.del{font-size:26px}.kp button.t.ok{background:var(--gold);color:var(--pri);border-color:var(--gold);font-size:17px}
 .lock .lk2{margin-top:18px;font-size:14px;font-weight:700;color:#F4D9A4;padding:8px}
 .pinset{display:flex;gap:8px;align-items:center}
 .toast{position:fixed;left:50%;bottom:150px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none}
@@ -474,7 +475,7 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='3.2 (kunci PIN)';
+const APP_VER='3.3 (tombol PIN lebih besar)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3}};
@@ -1328,8 +1329,8 @@ const hasPin=()=>!!LK.hash;
 async function pinHash(pin,salt){let d=new TextEncoder().encode(salt+':'+pin);for(let k=0;k<2000;k++)d=new Uint8Array(await crypto.subtle.digest('SHA-256',d));return[...d].map(b=>b.toString(16).padStart(2,'0')).join('')}
 const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a))),ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let lkMode='unlock',lkBuf='',lkFirst='',lkResolve=null,hiddenAt=0;
-function lkDraw(){const n=lkMode==='unlock'?(LK.len||4):6;$('#lkDots').innerHTML=Array.from({length:n},(_,k)=>`<i class="${k<lkBuf.length?'f':''}"></i>`).join('')}
-$('#lkPad').innerHTML=[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')+`<button class="t" data-k="x" id="lkCancel">Batal</button><button data-k="0">0</button><button class="t" data-k="b">⌫</button>`;
+function lkDraw(){const n=lkMode==='unlock'?(LK.len||4):6;$('#lkDots').innerHTML=Array.from({length:n},(_,k)=>`<i class="${k<lkBuf.length?'dot-on':''}"></i>`).join('')}
+$('#lkPad').innerHTML=[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')+`<button class="t" data-k="x" id="lkCancel">Batal</button><button data-k="0">0</button><button class="t del" data-k="b" aria-label="Hapus">⌫</button>`;
 function showLock(mode,title,msg){lkMode=mode;lkBuf='';$('#lkTitle').textContent=title;$('#lkMsg').textContent=msg||'';$('#lkCancel').style.visibility=mode==='unlock'?'hidden':'visible';
   $('#lkForgot').hidden=mode!=='unlock';$('#lkBio').hidden=!(mode==='unlock'&&LK.cred);document.body.classList.add('locked');lkDraw()}
 function hideLock(){document.body.classList.remove('locked');lkBuf=''}
@@ -1353,7 +1354,7 @@ async function lkNext(){
 }
 $('#lkPad').addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(b)lkInput(b.dataset.k)});
 // tombol ✓ buat mode pasang PIN: pakai tombol ⌫ panjang? lebih jelas: ganti "Batal" jadi ✓ saat ada isi
-const _draw=lkDraw;lkDraw=function(){_draw();const c=$('#lkCancel');if(lkMode==='set1'||lkMode==='set2'){c.textContent=lkBuf.length>=4?'✓ OK':'Batal';c.dataset.k=lkBuf.length>=4?'ok':'x'}else{c.textContent='Batal';c.dataset.k='x'}};
+const _draw=lkDraw;lkDraw=function(){_draw();const c=$('#lkCancel');if(lkMode==='set1'||lkMode==='set2'){c.textContent=lkBuf.length>=4?'✓ OK':'Batal';c.dataset.k=lkBuf.length>=4?'ok':'x';c.classList.toggle('ok',lkBuf.length>=4)}else{c.textContent='Batal';c.dataset.k='x';c.classList.remove('ok')}};
 const _inp=lkInput;lkInput=async function(k){if(k==='ok')return lkNext();return _inp(k)};
 document.addEventListener('keydown',e=>{if(!document.body.classList.contains('locked'))return;if(/^\d$/.test(e.key))lkInput(e.key);else if(e.key==='Backspace')lkInput('b');else if(e.key==='Enter'&&(lkMode==='set1'||lkMode==='set2'))lkNext()});
 function askPin(){return new Promise(r=>{lkResolve=r;showLock('verify','Masukkan PIN lama','')})}
