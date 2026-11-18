@@ -324,6 +324,8 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
       <label>Info pembayaran (rekening / e-wallet)</label><textarea class="f" id="cfBayar" rows="2"></textarea>
       <label>Ingatkan berapa hari sebelum jatuh tempo?</label>
       <select class="f" id="cfHari"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>7</option></select>
+      <label>Jatuh tempo default nota baru</label>
+      <select class="f" id="cfJt"><option value="7">1 minggu</option><option value="14">2 minggu</option><option value="1m">1 bulan</option><option value="45">45 hari</option><option value="2m">2 bulan</option><option value="3m">3 bulan</option></select>
       <button class="btn" id="cfSave">Simpan pengaturan</button>
     </div>
     <div class="sec">Backup data</div>
@@ -503,10 +505,10 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='3.8 (tempo 1 bulan, kirim gambar/PDF)';
+const APP_VER='3.9 (jatuh tempo default bisa diatur)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
-const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3}};
+const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
 let S;
 function normItem(i){
   i=Object.assign({tipe:'hutang',kat:'bisnis',pihak:'?',wa:'',tgl:today(),jt:'',mode:'nominal',baris:[],nominal:0,catatan:'',kategori:'',bayar:[],noInv:'',rincianTxt:''},i||{});
@@ -543,6 +545,9 @@ const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date());
 const addMonths=(s,n)=>{const d=new Date(s+'T00:00:00'),day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+n);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return ymd(d)};
+const JT_LBL={'7':'1 minggu','14':'2 minggu','1m':'1 bulan','45':'45 hari','2m':'2 bulan','3m':'3 bulan'};
+const jtDefV=()=>String((S&&S.cfg&&S.cfg.jtDef)||'1m'),jtDefLbl=()=>JT_LBL[jtDefV()]||jtDefV()+' hari';
+function defJt(base){const v=jtDefV();return /m$/.test(v)?addMonths(base,parseInt(v)):addDays(base,parseInt(v)||30)}
 const addDays=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d)};
 const diff=s=>Math.round((new Date(s+'T00:00:00')-new Date(today()+'T00:00:00'))/864e5);
 const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
@@ -750,7 +755,7 @@ let F={};
 function segVal(id,v){$$('#'+id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}
 function openForm(it,pre,draft){
   const def=(pre&&pre.tipe)||(curTab==='hut'?'hutang':'piutang');
-  F=draft?Object.assign(structuredClone(draft.F),{_draftId:draft.id}):it?structuredClone(it):{id:null,tipe:def,kat:def==='hutang'&&kHut==='pribadi'?'pribadi':'bisnis',pihak:(pre&&pre.pihak)||'',wa:(pre&&pre.wa)||'',tgl:today(),jt:addMonths(today(),1),mode:'nominal',baris:[{nama:'',qty:1,harga:0}],nominal:0,catatan:'',bayar:[]};
+  F=draft?Object.assign(structuredClone(draft.F),{_draftId:draft.id}):it?structuredClone(it):{id:null,tipe:def,kat:def==='hutang'&&kHut==='pribadi'?'pribadi':'bisnis',pihak:(pre&&pre.pihak)||'',wa:(pre&&pre.wa)||'',tgl:today(),jt:defJt(today()),mode:'nominal',baris:[{nama:'',qty:1,harga:0}],nominal:0,catatan:'',bayar:[]};
   $('#fTitle').textContent=it?'Edit catatan':draft?'Lanjutkan draft':'Catatan baru';$('#fLunas').checked=!!F._lunas;$('#lLunas').style.display=it?'none':'flex';$('#fDraft').style.display=it?'none':'block';formSaved=false;
   segVal('fTipe',F.tipe);segVal('fKat',F.kat);segVal('fMode',F.mode);
   $('#fPihak').value=F.pihak;$('#fWa').value=F.wa;$('#fTgl').value=F.tgl;$('#fJt').value=F.jt;$('#fNom').value=F.nominal?fmt(F.nominal):'';$('#fCat').value=F.catatan;
@@ -1054,8 +1059,9 @@ function showNotif(force){if(document.body.classList.contains('locked'))return;
 $('#bellBtn').onclick=()=>showNotif(true);
 
 /* ===== Settings ===== */
-function fillCfg(){const c=S.cfg;$('#cfNama').value=c.nama;$('#cfAlamat').value=c.alamat;$('#cfWa').value=c.wa;$('#cfBayar').value=c.bayar;$('#cfHari').value=c.hari}
-$('#cfSave').onclick=()=>{S.cfg={nama:$('#cfNama').value.trim()||'Albarokah Wangi',alamat:$('#cfAlamat').value.trim(),wa:$('#cfWa').value.trim(),bayar:$('#cfBayar').value.trim(),hari:+$('#cfHari').value};save();render();toast('Pengaturan disimpan')};
+function fillCfg(){const c=S.cfg;$('#cfNama').value=c.nama;$('#cfAlamat').value=c.alamat;$('#cfWa').value=c.wa;$('#cfBayar').value=c.bayar;$('#cfHari').value=c.hari;$('#cfJt').value=String(c.jtDef||'1m')}
+$('#cfSave').onclick=()=>{S.cfg={nama:$('#cfNama').value.trim()||'Albarokah Wangi',alamat:$('#cfAlamat').value.trim(),wa:$('#cfWa').value.trim(),bayar:$('#cfBayar').value.trim(),hari:+$('#cfHari').value,jtDef:$('#cfJt').value};save();render();toast('Pengaturan disimpan')};
+$('#cfJt').addEventListener('change',()=>{S.cfg.jtDef=$('#cfJt').value;save();toast('Jatuh tempo default: '+jtDefLbl()+' ✓')});
 async function doBackup(){
   const name='backup-tagihan-'+today()+'.json',data=JSON.stringify(Object.assign({},S,{_app:'abw-tagihan',_ver:APP_VER,_at:new Date().toISOString()}),null,1);
   const file=new File([data],name,{type:'application/json'});
@@ -1304,10 +1310,11 @@ function showScanRes(r){
 }
 function syncScanLabels(){$('#sPihakL').textContent=SC.tipe==='hutang'?(SC.kat==='pribadi'?'Hutang ke siapa':'Nama supplier (dari siapa tagihan ini)'):'Nama pelanggan'}
 segBind('sTipe','v',v=>{SC.tipe=v;syncScanLabels()});segBind('sKat','v',v=>{SC.kat=v;syncScanLabels()});
-function applyJtMode(){SC.rows.forEach(x=>{if(x.jtEdit)return;x.jt=SC.jtMode==='doc'?(x.docJt||addMonths(today(),1)):SC.jtMode==='plus'?addDays(x.tgl||today(),SC.hari||0):addMonths(today(),1)})}
+function applyJtMode(){SC.rows.forEach(x=>{if(x.jtEdit)return;x.jt=SC.jtMode==='doc'?(x.docJt||defJt(today())):SC.jtMode==='plus'?addDays(x.tgl||today(),SC.hari||0):defJt(today())})}
 function jtModeUI(){$$('#sJtMode .chip').forEach(c=>c.classList.toggle('on',c.dataset.m===SC.jtMode));$('#sPlusBox').hidden=SC.jtMode!=='plus';$('#sPlusBox').style.display=SC.jtMode==='plus'?'flex':'none';
   const nDoc=SC.rows.filter(x=>x.docJt).length;
-  $('#sJtInfo').textContent=SC.jtMode==='up'?`Semua nota jatuh tempo ${tglId(addMonths(today(),1))} (1 bulan dari hari ini).`+(nDoc?` ${nDoc} nota punya tanggal jatuh tempo sendiri — pilih "Ikut tanggal di nota" kalau mau pakai itu.`:''):SC.jtMode==='doc'?(nDoc?`${nDoc} nota pakai jatuh tempo dari nota, sisanya 1 bulan dari hari ini.`:'Nggak ada tanggal jatuh tempo di nota — semua jadi 1 bulan dari hari ini.'):`Jatuh tempo = tanggal tiap nota + ${SC.hari||0} hari.`}
+  $$('#sJtMode .chip[data-m=up]').forEach(c=>c.textContent=jtDefLbl()+' dari hari ini');
+  $('#sJtInfo').textContent=SC.jtMode==='up'?`Semua nota jatuh tempo ${tglId(defJt(today()))} (${jtDefLbl()} dari hari ini — ubah di Atur).`+(nDoc?` ${nDoc} nota punya tanggal jatuh tempo sendiri — pilih "Ikut tanggal di nota" kalau mau pakai itu.`:''):SC.jtMode==='doc'?(nDoc?`${nDoc} nota pakai jatuh tempo dari nota, sisanya ${jtDefLbl()} dari hari ini.`:`Nggak ada tanggal jatuh tempo di nota — semua jadi ${jtDefLbl()} dari hari ini.`):`Jatuh tempo = tanggal tiap nota + ${SC.hari||0} hari.`}
 $$('#sJtMode .chip').forEach(c=>c.onclick=()=>{SC.jtMode=c.dataset.m;SC.rows.forEach(x=>x.jtEdit=false);applyJtMode();drawRows();jtModeUI()});
 $('#sHari').oninput=e=>{SC.hari=num(e.target.value);applyJtMode();drawRows();jtModeUI()};
 function drawRows(){
@@ -1344,7 +1351,7 @@ $('#sSave').onclick=()=>{
   if(on.some(x=>!(x.pihak||'').trim()&&!pihak))return toast('Isi nama '+(SC.tipe==='hutang'?'supplier':'pelanggan')+' dulu');
   if(on.some(x=>!x.nominal||!x.tgl))return toast('Ada baris yang nominal/tanggalnya kosong');
   let n=0;
-  on.forEach(x=>{const ph=canonName((x.pihak||'').trim()||pihak);S.items.push({id:uid(),dibuat:Date.now()+n++,tipe:SC.tipe,kat:SC.kat,pihak:ph,wa:'',tgl:x.tgl,jt:x.jt||addMonths(today(),1),mode:'nominal',baris:[{nama:'',qty:1,harga:0}],nominal:r2(x.nominal),noInv:x.no||(SC.tipe==='piutang'?nextInv():''),catatan:'',kategori:(x.ket||'').trim().toUpperCase(),rincianTxt:x.rincian||'',bayar:x.paid>0?[{tgl:x.tgl,jumlah:Math.min(r2(x.paid),r2(x.nominal)),ket:'terbayar di nota'}]:[]})});
+  on.forEach(x=>{const ph=canonName((x.pihak||'').trim()||pihak);S.items.push({id:uid(),dibuat:Date.now()+n++,tipe:SC.tipe,kat:SC.kat,pihak:ph,wa:'',tgl:x.tgl,jt:x.jt||defJt(today()),mode:'nominal',baris:[{nama:'',qty:1,harga:0}],nominal:r2(x.nominal),noInv:x.no||(SC.tipe==='piutang'?nextInv():''),catatan:'',kategori:(x.ket||'').trim().toUpperCase(),rincianTxt:x.rincian||'',bayar:x.paid>0?[{tgl:x.tgl,jumlah:Math.min(r2(x.paid),r2(x.nominal)),ket:'terbayar di nota'}]:[]})});
   const cp=canonName(pihak),ex=S.items.find(i=>i.pihak===cp&&i.wa);if(ex)S.items.forEach(i=>{if(i.pihak===cp&&!i.wa)i.wa=ex.wa});
   askPersist();save();render();$('#ovScan').classList.remove('on');toast(n+' catatan tersimpan ✓');
   const tab=SC.tipe==='hutang'?'hut':'piu';$(`nav button[data-t=${tab}]`).click();
