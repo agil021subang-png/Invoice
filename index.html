@@ -271,7 +271,7 @@ nav button{min-width:0}
   <!-- HUTANG -->
   <section class="tab" id="t-hut">
     <input class="search" id="qHut" placeholder="Cari supplier / no / barang / nominal…">
-    <div class="seg" id="vHut" hidden><button data-v="nota" class="on">Per nota</button><button data-v="org">Per supplier</button></div>
+    <div class="seg" id="vHut"><button data-v="org" class="on">Per supplier</button><button data-v="nota">Per nota</button></div>
     <div class="seg" id="kHut" hidden>
       <button data-k="semua" class="on">Semua</button><button data-k="bisnis">Supplier / Bisnis</button><button data-k="pribadi">Pribadi</button>
     </div>
@@ -529,7 +529,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.3 (hutang: tanpa filter telat)';
+const APP_VER='4.4 (hutang: per supplier + per nota)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
