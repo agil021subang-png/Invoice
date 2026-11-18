@@ -1,4 +1,4 @@
-const CACHE = 'abw-tagihan-v16';
+const CACHE = 'abw-tagihan-v17';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -10,6 +10,9 @@ self.addEventListener('activate', e => {
 // Halaman: ambil versi terbaru dulu (biar update langsung masuk), cadangan dari cache kalau offline
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const u = new URL(e.request.url);
+  // Hanya simpan file apk sendiri & library dari CDN. Data sinkron (Supabase) selalu langsung ke server.
+  if (u.origin !== self.location.origin && !/(^|\.)(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net)$/.test(u.hostname)) return;
   const isPage = e.request.mode === 'navigate';
   if (isPage) {
     e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
