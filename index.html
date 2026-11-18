@@ -188,6 +188,14 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
   .fab{right:max(18px,calc(50% - 320px + 4px))}
   .fab::after{content:'N';position:absolute;bottom:-18px;font-size:10px;font-weight:700;color:var(--mute);letter-spacing:.5px}
 }
+.lgd{font-size:12px;font-weight:800;color:var(--mute);margin:16px 4px 6px;text-transform:uppercase;letter-spacing:.5px}
+.lg{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px;width:100%;text-align:left}
+.lg .ic2{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:16px;flex-shrink:0;background:#EEF2F2}
+.lg .ic2.in{background:var(--grnbg)}.lg .ic2.out{background:var(--redbg)}.lg .ic2.del{background:#F1ECE2}
+.lg .m{flex:1;min-width:0}.lg .n{font-weight:700;font-size:14px}.lg .d{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.4}
+.lg .tm{font-size:11px;color:var(--mute);flex-shrink:0;margin-top:2px}
+.lg .rs{margin-top:6px;font-size:12px;font-weight:700;color:var(--pri2);padding:4px 0}
+nav button{min-width:0}
 .toast{position:fixed;left:50%;bottom:150px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none}
 .toast.on{opacity:1}
 .tip{font-size:12px;color:var(--mute);background:#EFEAE0;padding:10px 12px;border-radius:10px;margin-top:10px;line-height:1.5}
@@ -293,6 +301,14 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
     <div class="dcard"><div class="brk" id="bBP"></div></div>
   </section>
 
+  <!-- RIWAYAT -->
+  <section class="tab" id="t-log">
+    <input class="search" id="qLog" placeholder="Cari nama / no nota / nominal…">
+    <div class="seg" id="fLog"><button data-f="semua" class="on">Semua</button><button data-f="bayar">Bayar</button><button data-f="baru">Baru</button><button data-f="ubah">Ubah</button><button data-f="hapus">Hapus</button></div>
+    <div id="logList"></div>
+    <button class="btn o" id="logMore" hidden>Tampilkan lebih banyak</button>
+  </section>
+
   <!-- PENGATURAN -->
   <section class="tab" id="t-set">
     <div class="sec" style="margin-top:4px">Sinkron HP ↔ komputer</div>
@@ -360,6 +376,7 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
   <button data-t="piu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Piutang</button>
   <button data-t="hut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Hutang</button>
   <button data-t="lap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Laporan</button>
+  <button data-t="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Riwayat</button>
   <button data-t="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 14.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Atur</button>
 </nav>
 
@@ -511,7 +528,7 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.0 (tampilan komputer rapi)';
+const APP_VER='4.1 (tab riwayat)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -525,14 +542,52 @@ function normItem(i){
   i.nominal=+i.nominal||0;i.tgl=String(i.tgl||today());i.jt=String(i.jt||'');
   return i;
 }
-function normState(d){const o=Object.assign(structuredClone(DEF),d||{});o.cfg=Object.assign({},DEF.cfg,o.cfg||{});o.seq=o.seq||{};o.dismiss=o.dismiss||{};o.drafts=Array.isArray(o.drafts)?o.drafts:[];o.tomb=o.tomb||{};o.items=(Array.isArray(o.items)?o.items:[]).map(normItem);return o}
+function normState(d){const o=Object.assign(structuredClone(DEF),d||{});o.cfg=Object.assign({},DEF.cfg,o.cfg||{});o.seq=o.seq||{};o.dismiss=o.dismiss||{};o.drafts=Array.isArray(o.drafts)?o.drafts:[];o.tomb=o.tomb||{};o.log=Array.isArray(o.log)?o.log:[];o.items=(Array.isArray(o.items)?o.items:[]).map(normItem);return o}
 function load(){try{S=normState(JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){S=structuredClone(DEF)}}
 let MEMO={};const stripJ=i=>JSON.stringify(Object.assign({},i,{_upd:undefined}));
-function memoInit(){MEMO={};S.items.forEach(i=>MEMO[i.id]=stripJ(i));MEMO.__cfg=JSON.stringify({cfg:S.cfg,seq:S.seq})}
-function trackChanges(){const now=Date.now(),seen=new Set();S.tomb=S.tomb||{};
-  S.items.forEach(i=>{seen.add(i.id);const j=stripJ(i);if(MEMO[i.id]!==j){i._upd=Math.max(now,(i._upd||0)+1);MEMO[i.id]=j;delete S.tomb[i.id]}});
-  Object.keys(MEMO).forEach(id=>{if(id==='__cfg')return;if(!seen.has(id)){S.tomb[id]=now;delete MEMO[id]}});
-  const cj=JSON.stringify({cfg:S.cfg,seq:S.seq});if(MEMO.__cfg!==cj){S.cfgUpd=now;MEMO.__cfg=cj}}
+function memoInit(){MEMO={};S.items.forEach(i=>MEMO[i.id]=stripJ(i));MEMO.__cfg=JSON.stringify({cfg:S.cfg,seq:S.seq,log:S.log})}
+function trackChanges(){const now=Date.now(),seen=new Set(),ev=[];S.tomb=S.tomb||{};
+  S.items.forEach(i=>{seen.add(i.id);const j=stripJ(i);const old=MEMO[i.id];if(old!==j){if(old===undefined)ev.push({a:'baru',it:i});else{try{diffLog(JSON.parse(old),i,ev)}catch(e){}}i._upd=Math.max(now,(i._upd||0)+1);MEMO[i.id]=j;delete S.tomb[i.id]}});
+  Object.keys(MEMO).forEach(id=>{if(id==='__cfg')return;if(!seen.has(id)){try{ev.push({a:'hapus',o:JSON.parse(MEMO[id])})}catch(e){}S.tomb[id]=now;delete MEMO[id]}});
+  if(ev.length)logPush(ev,now);
+  const cj=JSON.stringify({cfg:S.cfg,seq:S.seq,log:S.log});if(MEMO.__cfg!==cj){S.cfgUpd=now;MEMO.__cfg=cj}}
+/* ===== Riwayat (log) ===== */
+const bkey=b=>JSON.stringify([b.tgl,b.jumlah,b.ket||'',b.grp||'']);
+function diffLog(o,n,ev){
+  const ob=(o.bayar||[]).map(bkey),nb=(n.bayar||[]).map(bkey),left=[...ob];
+  (n.bayar||[]).forEach((b,k)=>{const x=left.indexOf(nb[k]);if(x>=0)left.splice(x,1);else ev.push({a:'bayar',it:n,b})});
+  const left2=[...nb];(o.bayar||[]).forEach((b,k)=>{const x=left2.indexOf(ob[k]);if(x>=0)left2.splice(x,1);else ev.push({a:'batal',it:n,b})});
+  const ch=[],tot=x=>r2(x.mode==='rinci'?(x.baris||[]).reduce((a,b)=>a+b.qty*b.harga,0):x.nominal);
+  if(tot(o)!==tot(n))ch.push(`nominal ${rp(tot(o))} → ${rp(tot(n))}`);
+  if((o.jt||'')!==(n.jt||''))ch.push(`jatuh tempo ${tglId(o.jt)} → ${tglId(n.jt)}`);
+  if(o.pihak!==n.pihak)ch.push(`nama ${o.pihak} → ${n.pihak}`);
+  if((o.noInv||'')!==(n.noInv||''))ch.push(`no ${o.noInv||'-'} → ${n.noInv||'-'}`);
+  if((o.tgl||'')!==(n.tgl||''))ch.push(`tanggal ${tglId(o.tgl)} → ${tglId(n.tgl)}`);
+  if((o.kategori||'')!==(n.kategori||''))ch.push(`kategori → ${n.kategori||'-'}`);
+  if((o.catatan||'')!==(n.catatan||''))ch.push('catatan diubah');
+  if(o.tipe!==n.tipe)ch.push(n.tipe==='piutang'?'jadi piutang':'jadi hutang');
+  if(ch.length)ev.push({a:'ubah',it:n,ch});
+}
+function logPush(ev,now){S.log=S.log||[];const out=[],mk=(a,x)=>Object.assign({k:uid(),t:now,a},x);
+  const grpd={};ev.filter(e=>e.a==='bayar'||e.a==='batal').forEach(e=>{const key=e.a+'|'+(e.b.grp||uid());(grpd[key]=grpd[key]||[]).push(e)});
+  Object.values(grpd).forEach(es=>{const e0=es[0],ids=[...new Set(es.map(e=>e.it.id))];out.push(mk(e0.a,{pihak:e0.it.pihak,tipe:e0.it.tipe,j:r2(es.reduce((s,e)=>s+e.b.jumlah,0)),n:ids.length,ids,no:ids.length===1?(e0.it.noInv||''):'',lunas:e0.a==='bayar'?ids.filter(id=>{const i=S.items.find(x=>x.id===id);return i&&sisa(i)<=0}).length:0,bulk:!!e0.b.grp}));});
+  const baru=ev.filter(e=>e.a==='baru');
+  if(baru.length>=2){const g={};baru.forEach(e=>{const key=e.it.tipe+'|'+e.it.pihak;(g[key]=g[key]||[]).push(e.it)});Object.values(g).forEach(its=>out.push(mk('baru',{pihak:its[0].pihak,tipe:its[0].tipe,j:r2(its.reduce((s,i)=>s+total(i),0)),n:its.length,ids:its.slice(0,100).map(i=>i.id),no:its.length===1?(its[0].noInv||''):''})))}
+  else baru.forEach(e=>out.push(mk('baru',{pihak:e.it.pihak,tipe:e.it.tipe,j:total(e.it),n:1,ids:[e.it.id],no:e.it.noInv||'',lunas:sisa(e.it)<=0?1:0})));
+  ev.filter(e=>e.a==='ubah').forEach(e=>out.push(mk('ubah',{pihak:e.it.pihak,tipe:e.it.tipe,j:total(e.it),n:1,ids:[e.it.id],no:e.it.noInv||'',ch:e.ch})));
+  const del=ev.filter(e=>e.a==='hapus');
+  if(del.length>5){const t2=r2(del.reduce((s,e)=>s+total(normItem(e.o)),0));out.push(mk('hapus',{pihak:'',tipe:'',j:t2,n:del.length,ids:[]}))}
+  else del.forEach(e=>{const o=normItem(e.o);out.push(mk('hapus',{pihak:o.pihak,tipe:o.tipe,j:total(o),n:1,ids:[o.id],no:o.noInv||'',snap:e.o}))});
+  S.log=out.concat(S.log).slice(0,800);
+  let ns=0;S.log.forEach(l=>{if(l.snap){ns++;if(ns>40)delete l.snap}});
+}
+function seedLog(){if(S.logSeeded)return;const L=[];
+  S.items.forEach(i=>{const t0=i.dibuat&&i.dibuat>1e12?i.dibuat:new Date((i.tgl||today())+'T09:00:00').getTime();
+    L.push({k:'seed:'+i.id+':baru',t:t0,a:'baru',pihak:i.pihak,tipe:i.tipe,j:total(i),n:1,ids:[i.id],no:i.noInv||''});
+    i.bayar.forEach((b,x)=>L.push({k:'seed:'+i.id+':b'+x,t:new Date((b.tgl||today())+'T12:00:00').getTime()+x,a:'bayar',pihak:i.pihak,tipe:i.tipe,j:b.jumlah,n:1,ids:[i.id],no:i.noInv||''}))});
+  S.log=L.concat(S.log||[]).sort((a,b)=>b.t-a.t).slice(0,800);S.logSeeded=true}
+function mergeLog(remote){if(!Array.isArray(remote))return false;const have=new Set((S.log||[]).map(l=>l.k));let add=0;remote.forEach(l=>{if(l&&l.k&&!have.has(l.k)){S.log.push(l);add++}});
+  if(add){S.log.sort((a,b)=>b.t-a.t);S.log=S.log.slice(0,800)}const rk=new Set(remote.map(l=>l&&l.k));return(S.log||[]).some(l=>!rk.has(l.k))}
 function saveRaw(){try{localStorage.setItem(KEY,JSON.stringify(S));return true}catch(e){toast('⚠️ GAGAL MENYIMPAN — ekspor backup sekarang!');return false}}
 function save(){trackChanges();const r=saveRaw();if(typeof scheduleSync==='function')scheduleSync();return r}
 let persistAsked=false;function askPersist(){if(persistAsked)return;persistAsked=true;try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{})}catch(e){}}
@@ -661,7 +716,7 @@ function render(){
   updateBadge(due.length);drawDrafts();
   const lb=S.lastBackup,days=lb?-diff(lb):999,show=S.items.length>=3&&days>=7;
   $('#bkBanner').hidden=!show;if(show)$('#bkBannerTxt').textContent=lb?`Terakhir backup ${days} hari lalu`:'Data belum pernah di-backup';
-  if(curTab==='lap')renderLap();
+  if(curTab==='lap')renderLap();if(curTab==='log')renderLog();
 }
 function updateBadge(n){
   const d=$('#bellDot');d.hidden=!n;d.textContent=n;
@@ -738,9 +793,39 @@ function grpHTML(list){const g={};list.forEach(i=>i.bayar.forEach(b=>{if(!b.grp)
 function undoGroup(id,name,tipe){const k='ug'+id;if(delArm!==k){delArm=k;toast('Tekan Batalkan sekali lagi buat hapus pembayaran ini dari semua nota');setTimeout(()=>{if(delArm===k)delArm=null},3500);return}delArm=null;
   let n=0;S.items.forEach(i=>{const b0=i.bayar.length;i.bayar=i.bayar.filter(b=>b.grp!==id);n+=b0-i.bayar.length});save();render();toast(n+' pembayaran dibatalkan');openCust(name,tipe)}
 
+/* ===== Tab Riwayat ===== */
+let fLog='semua',logLimit=60;
+function logText(l){const P=l.tipe==='piutang',who=esc(l.pihak||'');
+  if(l.a==='bayar')return{ic:'💰',cls:P?'in':'out',n:`${P?'Terima':'Bayar'} ${rp(l.j)}${who?' · '+who:''}`,d:(l.bulk?`Bayar sekaligus · ${l.n} nota`:(l.no?esc(l.no):''))+(l.lunas?` · ${l.lunas} lunas`:'')};
+  if(l.a==='batal')return{ic:'↩️',cls:'',n:`Pembayaran ${rp(l.j)} dibatalkan`,d:who+(l.n>1?` · ${l.n} nota`:'')};
+  if(l.a==='baru')return{ic:'📝',cls:'',n:l.n>1?`${l.n} ${P?'piutang':'nota hutang'} baru · ${who}`:`${P?'Piutang':'Hutang'} baru · ${who}`,d:`${rp(l.j)}${l.no&&l.n===1?' · '+esc(l.no):''}${l.lunas?' · langsung lunas':''}`};
+  if(l.a==='ubah')return{ic:'✏️',cls:'',n:`Diubah · ${who}`,d:esc((l.ch||[]).join(' · '))+(l.no?' · '+esc(l.no):'')};
+  if(l.a==='hapus')return{ic:'🗑',cls:'del',n:l.n>1?`${l.n} catatan dihapus`:`Dihapus · ${who}`,d:`${rp(l.j)}${l.no?' · '+esc(l.no):''}`};
+  return{ic:'•',cls:'',n:l.a,d:''}}
+function renderLog(){
+  const q=$('#qLog').value.trim().toLowerCase(),qn=q.replace(/[^\d]/g,'');
+  let L=(S.log||[]).filter(l=>fLog==='semua'||(fLog==='bayar'?(l.a==='bayar'||l.a==='batal'):l.a===fLog));
+  if(q)L=L.filter(l=>{const tx=((l.pihak||'')+' '+(l.no||'')+' '+(l.ch||[]).join(' ')).toLowerCase();return tx.includes(q)||nkey(l.pihak||'').includes(nkey(q))||(qn.length>=3&&String(Math.round(l.j||0)).includes(qn))});
+  const shown=L.slice(0,logLimit);let html='',cur='';const td=today(),yd=addDays(td,-1);
+  shown.forEach((l,ix)=>{const d=ymd(new Date(l.t)),lab=d===td?'Hari ini':d===yd?'Kemarin':tglId(d);if(lab!==cur){cur=lab;html+=`<div class="lgd">${lab}</div>`}
+    const x=logText(l),tm=new Date(l.t).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),seed=String(l.k).startsWith('seed:');
+    html+=`<div class="lg" data-log="${esc(l.k)}"><div class="ic2 ${x.cls}">${x.ic}</div><div class="m"><div class="n">${x.n}</div><div class="d">${x.d}</div>${l.a==='hapus'&&l.snap&&!S.items.some(i=>i.id===l.ids[0])?`<button class="rs" data-restore="${esc(l.k)}">↩︎ Pulihkan</button>`:''}</div><div class="tm">${seed&&l.a!=='baru'?'':tm}</div></div>`});
+  $('#logList').innerHTML=html||emp(q?'Nggak ketemu.':'Belum ada riwayat.');
+  $('#logMore').hidden=L.length<=logLimit;
+}
+segBind('fLog','f',v=>{fLog=v;logLimit=60;renderLog()});
+$('#qLog').oninput=()=>{logLimit=60;renderLog()};
+$('#logMore').onclick=()=>{logLimit+=100;renderLog()};
+$('#logList').addEventListener('click',e=>{
+  const rs=e.target.closest('[data-restore]');if(rs){e.stopPropagation();const l=(S.log||[]).find(x=>x.k===rs.dataset.restore);if(!l||!l.snap)return;const k='rs'+l.k;if(delArm!==k){delArm=k;toast('Tekan Pulihkan sekali lagi');setTimeout(()=>{if(delArm===k)delArm=null},3000);return}delArm=null;
+    const it=normItem(l.snap);if(S.items.some(i=>i.id===it.id))return toast('Catatan ini udah ada');S.items.push(it);save();render();renderLog();toast('Catatan dipulihkan ✓');return}
+  const row=e.target.closest('[data-log]');if(!row)return;const l=(S.log||[]).find(x=>x.k===row.dataset.log);if(!l)return;
+  const live=(l.ids||[]).filter(id=>S.items.some(i=>i.id===id));
+  if(live.length===1)openDet(live[0]);else if(live.length>1&&l.pihak)openCust(l.pihak,l.tipe);else if(l.a==='hapus')toast('Catatan ini udah dihapus');});
+
 /* ===== Nav ===== */
 let curTab='home';
-$$('nav button').forEach(b=>b.onclick=()=>{curTab=b.dataset.t;$$('nav button').forEach(x=>x.classList.toggle('on',x===b));$$('.tab').forEach(t=>t.classList.toggle('on',t.id==='t-'+curTab));$('#fab').style.display=(curTab==='set'||curTab==='lap')?'none':'grid';if(curTab==='lap')renderLap();window.scrollTo(0,0)});
+$$('nav button').forEach(b=>b.onclick=()=>{curTab=b.dataset.t;$$('nav button').forEach(x=>x.classList.toggle('on',x===b));$$('.tab').forEach(t=>t.classList.toggle('on',t.id==='t-'+curTab));$('#fab').style.display=(curTab==='set'||curTab==='lap'||curTab==='log')?'none':'grid';if(curTab==='lap')renderLap();if(curTab==='log'){logLimit=60;renderLog()}window.scrollTo(0,0)});
 function segBind(id,attr,cb){$$('#'+id+' button').forEach(b=>b.onclick=()=>{$$('#'+id+' button').forEach(x=>x.classList.toggle('on',x===b));cb(b.dataset[attr])})}
 segBind('fPiu','f',v=>{fPiu=v;render()});segBind('vPiu','v',v=>{vPiu=v;render()});segBind('vHut','v',v=>{vHut=v;render()});segBind('fHut','f',v=>{fHut=v;render()});segBind('kHut','k',v=>{kHut=v;render()});
 $('#qPiu').oninput=render;$('#qHut').oninput=render;
@@ -1403,7 +1488,7 @@ async function syncNow(){
       const since=SY.lastPull||'1970-01-01T00:00:00Z';
       const rows=await syApi(`/rest/v1/tagihan_items?select=id,data,deleted,upd,updated_at&updated_at=gte.${encodeURIComponent(since)}&order=updated_at.asc&limit=500`,{method:'GET'})||[];
       rows.forEach(r=>{
-        if(r.id==='__meta'){if(r.data&&r.upd>(S.cfgUpd||0)){S.cfg=Object.assign({},DEF.cfg,r.data.cfg||{});S.seq=Object.assign({},S.seq,r.data.seq||{});S.cfgUpd=r.upd;MEMO.__cfg=JSON.stringify({cfg:S.cfg,seq:S.seq});changed=true}SY.pushed.__meta=Math.max(SY.pushed.__meta||0,r.upd);return}
+        if(r.id==='__meta'){let mine=false;if(r.data){mine=mergeLog(r.data.log||[]);if(r.upd>(S.cfgUpd||0)){S.cfg=Object.assign({},DEF.cfg,r.data.cfg||{});S.seq=Object.assign({},S.seq,r.data.seq||{});S.cfgUpd=r.upd}changed=true}SY.pushed.__meta=Math.max(SY.pushed.__meta||0,r.upd);if(mine)S.cfgUpd=Math.max(Date.now(),(SY.pushed.__meta||0)+1);MEMO.__cfg=JSON.stringify({cfg:S.cfg,seq:S.seq,log:S.log});return}
         const k=S.items.findIndex(i=>i.id===r.id),loc=k>=0?S.items[k]:null,tomb=(S.tomb||{})[r.id]||0;
         if(r.deleted){if(loc&&(loc._upd||0)<=r.upd){S.items.splice(k,1);delete MEMO[r.id];changed=true}if(tomb&&tomb<=r.upd)delete S.tomb[r.id];}
         else if(r.data&&r.upd>Math.max(loc?(loc._upd||0):0,tomb)){const it=normItem(r.data);it._upd=r.upd;if(loc)S.items[k]=it;else S.items.push(it);MEMO[it.id]=stripJ(it);if(tomb)delete S.tomb[r.id];changed=true}
@@ -1417,7 +1502,7 @@ async function syncNow(){
     const batch=[];
     S.items.forEach(i=>{if(!i._upd)i._upd=Date.now();if(i._upd>(SY.pushed[i.id]||0))batch.push({user_id:SY.uid,id:i.id,data:i,deleted:false,upd:i._upd})});
     Object.entries(S.tomb||{}).forEach(([id,t])=>{if(t>(SY.pushed[id]||0))batch.push({user_id:SY.uid,id,data:null,deleted:true,upd:t})});
-    if((S.cfgUpd||0)>(SY.pushed.__meta||0))batch.push({user_id:SY.uid,id:'__meta',data:{cfg:S.cfg,seq:S.seq},deleted:false,upd:S.cfgUpd});
+    if((S.cfgUpd||0)>(SY.pushed.__meta||0))batch.push({user_id:SY.uid,id:'__meta',data:{cfg:S.cfg,seq:S.seq,log:(S.log||[]).map(l=>{const c=Object.assign({},l);delete c.snap;return c})},deleted:false,upd:S.cfgUpd});
     for(let a=0;a<batch.length;a+=200){const part=batch.slice(a,a+200);
       await syApi('/rest/v1/tagihan_items?on_conflict=user_id,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(part)});
       part.forEach(r=>{SY.pushed[r.id]=r.upd})}
@@ -1512,6 +1597,7 @@ document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return
 $('#today').textContent=new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 $('#verTxt').textContent=APP_VER;
 $('#forceUpd').onclick=async()=>{toast('Memuat ulang…');try{const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));const rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(r=>r.update()))}catch(e){}location.reload()};
+if(!S.logSeeded){try{seedLog();saveRaw()}catch(e){}}MEMO.__cfg=JSON.stringify({cfg:S.cfg,seq:S.seq,log:S.log});
 fillCfg();badgeInfo();render();oflStatus();drawLockCard();setSync(SY.refresh?'ok':'');if(SY.refresh)setTimeout(syncNow,800);
 setTimeout(()=>showNotif(false),500);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if($('#ovForm').classList.contains('on'))saveDraft(true)}else{render();showNotif(false)}});
