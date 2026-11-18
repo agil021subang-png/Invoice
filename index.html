@@ -177,6 +177,11 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
 .kp button.t.del{font-size:26px}.kp button.t.ok{background:var(--gold);color:var(--pri);border-color:var(--gold);font-size:17px}
 .lock .lk2{margin-top:18px;font-size:14px;font-weight:700;color:#F4D9A4;padding:8px}
 .pinset{display:flex;gap:8px;align-items:center}
+.bkr{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px}
+.bkr.off{opacity:.45}.bkr input[type=checkbox]{width:20px;height:20px;accent-color:var(--pri);flex-shrink:0}
+.bkr .m{flex:1;min-width:0}.bkr .n{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bkr .d{font-size:11.5px;color:var(--mute)}
+.bkr .r{text-align:right;font-size:12px}.bkr .r b{display:block;font-size:13.5px}
+.grp{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:8px 0;border-bottom:1px solid var(--line)}
 .toast{position:fixed;left:50%;bottom:150px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none}
 .toast.on{opacity:1}
 .tip{font-size:12px;color:var(--mute);background:#EFEAE0;padding:10px 12px;border-radius:10px;margin-top:10px;line-height:1.5}
@@ -455,6 +460,21 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
 <!-- Modal: pelanggan -->
 <div class="ov" id="ovCust"><div class="sheet" id="custBody"></div></div>
 
+<!-- Modal: bayar sekaligus -->
+<div class="ov" id="ovBulk"><div class="sheet">
+  <h2><span id="bkTitle">Bayar sekaligus</span><button class="x" data-close>×</button></h2>
+  <div class="dcard"><div class="kv"><span>Total belum dibayar</span><b id="bkSisa"></b></div><div class="kv"><span>Jumlah nota</span><b id="bkN"></b></div></div>
+  <div class="amtL" style="margin-top:14px">Jumlah yang dibayar</div>
+  <div class="amtIn"><span>Rp</span><input id="bkJml" inputmode="decimal" placeholder="0" autocomplete="off" style="width:100%;max-width:260px;border:0;background:transparent;font-size:32px!important;font-weight:800;color:var(--ink);padding:4px 0;outline:none"></div>
+  <div class="chips" style="justify-content:center;margin-top:8px"><button class="chip" id="bkAll">Lunasi semua</button></div>
+  <div class="row"><div><label>Tanggal bayar</label><input class="f" type="date" id="bkTgl"></div><div><label>Keterangan</label><input class="f" id="bkKet" placeholder="transfer BCA"></div></div>
+  <div class="sec">Dibagi ke nota (jatuh tempo terlama dulu)</div>
+  <div class="tip" style="margin:0 0 8px">Hilangkan centang kalau ada nota yang nggak mau dibayar sekarang.</div>
+  <div id="bkList"></div>
+  <div class="warn" id="bkWarn" style="margin-top:8px"></div>
+  <button class="btn g" id="bkSave">Simpan pembayaran</button>
+</div></div>
+
 <!-- Modal: cari -->
 <div class="ov" id="ovSrch"><div class="sheet" style="min-height:85vh">
   <h2>🔍 Cari<button class="x" data-close>×</button></h2>
@@ -476,7 +496,7 @@ body.locked>*:not(.lock):not(.toast){visibility:hidden}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='3.5 (tombol lebih responsif)';
+const APP_VER='3.6 (bayar sekaligus)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3}};
@@ -486,7 +506,7 @@ function normItem(i){
   if(!i.id)i.id=uid();if(!i.dibuat)i.dibuat=Date.now();
   if(!Array.isArray(i.baris)||!i.baris.length)i.baris=[{nama:'',qty:1,harga:0}];
   i.baris=i.baris.map(b=>({nama:String(b.nama||''),qty:+b.qty||0,harga:+b.harga||0}));
-  i.bayar=(Array.isArray(i.bayar)?i.bayar:[]).filter(b=>b&&+b.jumlah>0).map(b=>({tgl:String(b.tgl||i.tgl),jumlah:+b.jumlah,ket:String(b.ket||'')}));
+  i.bayar=(Array.isArray(i.bayar)?i.bayar:[]).filter(b=>b&&+b.jumlah>0).map(b=>Object.assign({tgl:String(b.tgl||i.tgl),jumlah:+b.jumlah,ket:String(b.ket||'')},b.grp?{grp:String(b.grp)}:{}));
   i.nominal=+i.nominal||0;i.tgl=String(i.tgl||today());i.jt=String(i.jt||'');
   return i;
 }
@@ -652,13 +672,52 @@ function openCust(name,tipe){
   $('#custBody').innerHTML=`<h2>${esc(name)}<button class="x" data-close>×</button></h2>
   <div class="cst"><div class="sbox ${p?'in':'out'}"><div class="l">${p?'Belum dibayar':'Belum gw bayar'}</div><div class="v">${rp(st.sisa)}</div><div class="s">${st.open} ${p?'invoice':'nota'}${st.telat?' · '+st.telat+' telat':''}</div></div>
   <div class="sbox"><div class="l">Total transaksi</div><div class="v" style="font-size:16px">${rp(st.total)}</div><div class="s">${st.n} catatan${st.wa?' · '+esc(st.wa):''}</div></div></div>
-  <div class="btns">${p&&st.sisa?`<button class="btn g" id="cRekap">📑 Rekap tagihan</button>`:''}${st.wa?`<button class="btn o" id="cWa">💬 Chat WA</button>`:''}<button class="btn o" id="cNew">＋ Catatan baru</button></div>
+  ${st.sisa?`<button class="btn g" id="cBulk" style="margin-top:10px">💰 ${p?'Terima pembayaran':'Bayar'} sekaligus</button>`:''}
+  <div class="btns">${p&&st.sisa?`<button class="btn o" id="cRekap">📑 Rekap tagihan</button>`:''}${st.wa?`<button class="btn o" id="cWa">💬 Chat WA</button>`:''}<button class="btn o" id="cNew">＋ Catatan baru</button></div>
+  ${grpHTML(list)}
   <div class="sec">Semua catatan</div><div class="list">${sorted.map(card).join('')}</div>`;
   open('#ovCust');
   const on=(sel,fn)=>{const e=$(sel);if(e)e.onclick=fn};
-  on('#cRekap',()=>sendRekap(name));on('#cWa',()=>window.open(waLink(st.wa,''),'_blank'));
+  on('#cRekap',()=>sendRekap(name));on('#cBulk',()=>openBulk(name,tipe));
+  $$('#custBody [data-ungrp]').forEach(x=>x.onclick=()=>undoGroup(x.dataset.ungrp,name,tipe));on('#cWa',()=>window.open(waLink(st.wa,''),'_blank'));
   on('#cNew',()=>{$('#ovCust').classList.remove('on');openForm(null,{pihak:name,tipe,wa:st.wa})});
 }
+
+/* ===== Bayar sekaligus ===== */
+let BK={name:'',tipe:'',rows:[]};
+function openBulk(name,tipe){
+  const list=S.items.filter(i=>i.pihak===name&&i.tipe===tipe&&sisa(i)>0).sort((a,b)=>(a.jt||'9999').localeCompare(b.jt||'9999')||(a.tgl||'').localeCompare(b.tgl||'')||(a.noInv||'').localeCompare(b.noInv||''));
+  BK={name,tipe,rows:list.map(i=>({id:i.id,on:true}))};
+  $('#bkTitle').textContent=(tipe==='piutang'?'Terima pembayaran — ':'Bayar ke ')+name;
+  $('#bkSisa').textContent=rp(list.reduce((a,i)=>a+sisa(i),0));$('#bkN').textContent=list.length+' nota';
+  $('#bkJml').value='';$('#bkTgl').value=today();$('#bkKet').value='';
+  $('#ovCust').classList.remove('on');open('#ovBulk');bulkDraw();setTimeout(()=>$('#bkJml').focus(),250);
+}
+function bulkPlan(){let left=r2(parseAmt($('#bkJml').value));const plan=[];
+  BK.rows.forEach(r=>{const it=get(r.id);if(!it)return;const s0=sisa(it);let pay=0;if(r.on&&left>0){pay=Math.min(left,s0);left=r2(left-pay)}plan.push({it,r,s0,pay:r2(pay),after:r2(s0-pay)})});
+  return{plan,left}}
+function bulkDraw(){const {plan,left}=bulkPlan(),tot=r2(plan.reduce((a,x)=>a+x.pay,0));
+  $('#bkList').innerHTML=plan.map((x,k)=>{const it=x.it,st=status(it);return `<label class="bkr ${x.r.on?'':'off'}"><input type="checkbox" data-bk="${k}" ${x.r.on?'checked':''}>
+    <div class="m"><div class="n">${esc(it.noInv||tglId(it.tgl))}</div><div class="d">tempo ${tglId(it.jt)}${st.k==='telat'?' · <span style="color:var(--red)">'+st.t+'</span>':''} · sisa ${rp(x.s0)}</div></div>
+    <div class="r">${x.pay?`<b style="color:var(--grn)">-${rp(x.pay)}</b>${x.after<=0?'<span class="pill st-lunas" style="margin:0">Lunas</span>':'sisa '+rp(x.after)}`:'<span style="color:var(--mute)">—</span>'}</div></label>`}).join('');
+  const nL=plan.filter(x=>x.pay&&x.after<=0).length,nP=plan.filter(x=>x.pay&&x.after>0).length;
+  $('#bkWarn').innerHTML=left>0?`⚠️ Kelebihan ${rp(left)} — nggak dicatat (semua nota yang dicentang udah lunas).`:'';
+  $('#bkSave').textContent=tot?`Simpan: ${rp(tot)} → ${nL} lunas${nP?', '+nP+' sebagian':''}`:'Simpan pembayaran';
+}
+$('#bkJml').addEventListener('input',e=>{liveMoney(e.target);bulkDraw()});
+$('#bkList').addEventListener('change',e=>{const k=e.target.dataset.bk;if(k===undefined)return;BK.rows[+k].on=e.target.checked;bulkDraw()});
+$('#bkAll').onclick=()=>{const t=BK.rows.filter(r=>r.on).reduce((a,r)=>a+sisa(get(r.id)),0);$('#bkJml').value=fmt(t);bulkDraw()};
+$('#bkSave').onclick=()=>{const {plan}=bulkPlan(),tot=r2(plan.reduce((a,x)=>a+x.pay,0));if(!tot)return toast('Isi jumlah yang dibayar');
+  const grp='g'+uid(),tgl=$('#bkTgl').value||today(),ket=$('#bkKet').value.trim(),lbl=`Bayar sekaligus ${rp(tot)}`+(ket?' · '+ket:'');
+  plan.forEach(x=>{if(x.pay>0)x.it.bayar.push({tgl,jumlah:x.pay,ket:lbl,grp})});
+  askPersist();save();render();$('#ovBulk').classList.remove('on');
+  const nL=plan.filter(x=>x.pay&&x.after<=0).length,nP=plan.filter(x=>x.pay&&x.after>0).length;
+  toast(`${rp(tot)} tercatat: ${nL} nota lunas${nP?', '+nP+' sebagian':''} ✓`);openCust(BK.name,BK.tipe)};
+function grpHTML(list){const g={};list.forEach(i=>i.bayar.forEach(b=>{if(!b.grp)return;(g[b.grp]=g[b.grp]||{tgl:b.tgl,tot:0,n:0,ket:b.ket});g[b.grp].tot+=b.jumlah;g[b.grp].n++}));
+  const arr=Object.entries(g).sort((a,b)=>b[1].tgl.localeCompare(a[1].tgl)).slice(0,5);if(!arr.length)return'';
+  return `<div class="sec">Pembayaran sekaligus</div><div class="dcard">${arr.map(([id,x])=>`<div class="grp"><span>${tglId(x.tgl)} · <b>${rp(x.tot)}</b> · ${x.n} nota</span><button class="del" style="font-size:12px;font-weight:700" data-ungrp="${id}">Batalkan</button></div>`).join('')}</div>`}
+function undoGroup(id,name,tipe){const k='ug'+id;if(delArm!==k){delArm=k;toast('Tekan Batalkan sekali lagi buat hapus pembayaran ini dari semua nota');setTimeout(()=>{if(delArm===k)delArm=null},3500);return}delArm=null;
+  let n=0;S.items.forEach(i=>{const b0=i.bayar.length;i.bayar=i.bayar.filter(b=>b.grp!==id);n+=b0-i.bayar.length});save();render();toast(n+' pembayaran dibatalkan');openCust(name,tipe)}
 
 /* ===== Nav ===== */
 let curTab='home';
@@ -775,6 +834,7 @@ function openDet(id){
     ${p&&S.items.some(x=>x.tipe==='piutang'&&x.pihak===it.pihak&&sisa(x)>0)?`<button class="btn o" id="dRekap">📑 Rekap tagihan</button>`:''}
     ${p&&sisa(it)&&it.wa?`<button class="btn o" id="dTagih">💬 Tagih via WA</button>`:''}
     ${!p&&it.wa&&sisa(it)?`<button class="btn o" id="dChat">💬 Chat ${it.kat==='pribadi'?'orangnya':'supplier'}</button>`:''}
+    <button class="btn o" id="dOrg">👤 Semua nota ${p?'pelanggan':'supplier'} ini</button>
     <button class="btn o" id="dEdit">✏️ Edit</button>
     <button class="btn d" id="dDel">🗑 Hapus</button>
   </div>`;
@@ -782,6 +842,7 @@ function openDet(id){
   const on=(sel,fn)=>{const e=$(sel);if(e)e.onclick=fn};
   on('#dPay',openPay);on('#dInv',()=>openInv(it));on('#dRekap',()=>sendRekap(it.pihak));on('#dTagih',()=>waTagih(it));
   on('#dChat',()=>window.open(waLink(it.wa,''),'_blank'));
+  on('#dOrg',()=>{$('#ovDet').classList.remove('on');openCust(it.pihak,it.tipe)});
   on('#dEdit',()=>{$('#ovDet').classList.remove('on');openForm(it)});
   on('#dDel',()=>{if(confirmDel(it)){S.items=S.items.filter(x=>x.id!==it.id);save();render();$('#ovDet').classList.remove('on');toast('Dihapus')}});
   $$('#detBody [data-unpay]').forEach(x=>x.onclick=()=>{const k='unpay'+it.id+x.dataset.unpay;if(delArm!==k){delArm=k;toast('Tekan × sekali lagi buat hapus pembayaran ini');setTimeout(()=>{if(delArm===k)delArm=null},3000);return}delArm=null;it.bayar.splice(+x.dataset.unpay,1);save();render();openDet(it.id);toast('Pembayaran dihapus')});
