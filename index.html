@@ -542,7 +542,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.8 (update otomatis)';
+const APP_VER='4.9 (pengaman kirim ke AB AI)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -1526,9 +1526,9 @@ async function syncNow(){
       await syApi('/rest/v1/tagihan_items?on_conflict=user_id,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(part)});
       part.forEach(r=>{SY.pushed[r.id]=r.upd})}
     Object.keys(S.tomb||{}).forEach(id=>{if((SY.pushed[id]||0)>=S.tomb[id])delete S.tomb[id]});
-    saveRaw();SY.lastSync=Date.now();sySave();setSync('ok');
+    saveRaw();SY.lastSync=Date.now();sySave();setSync('ok');abSyncDone=true;if(typeof abSchedule==='function')abSchedule();
   }catch(e){sySave();if(/sesi habis|refresh/i.test(niceErr(e))&&e.status===400){SY.refresh='';sySave()}setSync('err',niceErr(e))}
-  finally{syncing=false;if(syncAgain){syncAgain=false;scheduleSync()}}
+  finally{syncing=false;if(!abSyncDone){abSyncDone=true;if(typeof abSchedule==='function')abSchedule()}if(syncAgain){syncAgain=false;scheduleSync()}}
 }
 $('#syConnect').onclick=async()=>{
   let url=$('#syUrl').value.trim().replace(/\/+$/,'').replace(/\/rest\/v1$/,'');const key=$('#syKey').value.trim(),email=$('#syEmail').value.trim(),pass=$('#syPass').value;
@@ -1612,13 +1612,20 @@ const abHash=t=>{let h=0;for(let k=0;k<t.length;k++)h=(h*31+t.charCodeAt(k))|0;r
 function abStat(){const el=$('#abStat');if(!el)return;el.textContent=!AB.url?'Belum disambung':AB.err?('⚠️ '+AB.err):AB.at?('✓ Terkirim '+new Date(AB.at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})):'Menunggu kirim'}
 let abT=null,abBusy=false;
 function abSchedule(){if(!AB.url||!AB.tok)return;clearTimeout(abT);abT=setTimeout(()=>abSend(false),4000)}
-async function abSend(force){
+var abSyncDone=false;
+async function abSend(force,paksa){
   if(!AB.url||!AB.tok||abBusy||!navigator.onLine)return;
-  const items=abPayload(),body=JSON.stringify({items,sumber:'AB Wangi Tagihan'}),h=abHash(body);
+  // Tunggu sinkron Supabase selesai dulu (biar nggak ngirim data yang belum lengkap)
+  if(!force&&typeof SY!=='undefined'&&SY.refresh&&!abSyncDone)return;
+  const items=abPayload();
+  if(!force&&!items.length)return; // data kosong nggak pernah dikirim otomatis
+  const body=JSON.stringify({items,sumber:'AB Wangi Tagihan',paksa:!!paksa}),h=abHash(body);
   if(!force&&h===AB.hash)return;
   abBusy=true;
   try{const r=await fetch(AB.url+'/api/tagihan/sync',{method:'POST',headers:{authorization:'Bearer '+AB.tok,'content-type':'application/json'},body});
     let j={};try{j=await r.json()}catch(e){}
+    if(r.status===409&&force&&!paksa){abBusy=false;if(confirm((j.error||'Data di Kantor AB AI lebih banyak.')+'\n\nYakin data di perangkat INI yang paling benar dan mau menimpa?'))return abSend(true,true);AB.err='Tidak dikirim: data perangkat ini lebih sedikit';abSave_();abStat();return}
+    if(r.status===409){AB.err='Tidak dikirim: data perangkat ini kurang lengkap dari yang di Kantor AB AI';abSave_();abStat();return}
     if(!r.ok)throw new Error(r.status===401?'Token salah':r.status===403?'Token ini tidak diizinkan':(j.error||('HTTP '+r.status)));
     AB.hash=h;AB.at=Date.now();AB.err='';abSave_();abStat();if(force)toast('Terkirim ke Kantor AB AI ✓ ('+j.diterima+' tagihan)')}
   catch(e){AB.err=e.message==='Failed to fetch'?'Nggak bisa nyambung (cek alamat)':e.message;abSave_();abStat();if(force)toast('Gagal kirim: '+AB.err)}
