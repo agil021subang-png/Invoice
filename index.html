@@ -467,6 +467,9 @@ nav button{min-width:0}
     <div class="tip" style="margin-top:0">Bisa <b>foto, screenshot, PDF, Excel, atau CSV</b> berisi tanggal · no invoice · nominal. Pilih banyak file sekaligus — tiap baris jadi 1 catatan terpisah. Lo bakal ngecek dulu sebelum disimpan.<br><br>Paling akurat: PDF dari sistem & file Excel (dibaca langsung, tanpa tebak). Foto: lurus, terang, nggak blur.</div>
     <button class="btn" id="scanChoose">Pilih file (foto / PDF / Excel)</button>
     <input type="file" id="scanFile" accept="image/*,application/pdf,.pdf,.xlsx,.xls,.csv" multiple hidden>
+    <button class="btn o" id="scanAI" style="margin-top:8px">🤖 Foto nota, baca pakai AI</button>
+    <input type="file" id="scanFileAI" accept="image/*" hidden>
+    <div class="tip" id="scanAITip">Pakai AI di Kantor AB AI: lebih jago baca nota kusut / tulisan tangan / struk pudar. Butuh internet, ±15 detik per foto.</div>
   </div>
   <div id="scanBusy" hidden>
     <img id="scanImg" style="width:100%;border-radius:10px;border:1px solid var(--line);max-height:180px;object-fit:contain;background:#fff">
@@ -490,6 +493,7 @@ nav button{min-width:0}
     <button class="add" id="sAdd">+ Tambah baris manual</button>
     <button class="btn" id="sSave">Simpan</button>
     <button class="btn o" id="sAgain">Scan foto lain</button>
+    <div class="btns" id="sAIBox" hidden><button class="btn o" id="sAIRe">🤖 Baca ulang pakai AI</button><button class="btn o" id="sAIRot">↻ Putar foto & baca ulang</button></div>
   </div>
 </div></div>
 
@@ -1352,7 +1356,7 @@ function fileKind(f){const n=(f.name||'').toLowerCase();if(f.type==='application
 function loadTess(){return new Promise((ok,no)=>{if(window.Tesseract)return ok();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';s.onload=ok;s.onerror=()=>no(new Error('net'));document.head.appendChild(s)})}
 let SC={rows:[],total:0,judul:'',tipe:'hutang',kat:'bisnis',hari:30};
 function scanReset(){$('#scanPick').hidden=false;$('#scanBusy').hidden=true;$('#scanRes').hidden=true}
-function openScan(){scanReset();open('#ovScan')}
+function openScan(){scanReset();if(typeof aiTipUI==='function')aiTipUI();open('#ovScan')}
 $('#scanHdr').onclick=openScan;
 $('#scanForm').onclick=()=>{$('#ovForm').classList.remove('on');openScan()};
 $('#scanChoose').onclick=()=>$('#scanFile').click();
@@ -1360,6 +1364,7 @@ $('#sAgain').onclick=()=>{scanReset();$('#scanFile').click()};
 let scanCur={i:0,n:1};
 $('#scanFile').onchange=async e=>{
   const files=[...e.target.files];e.target.value='';if(!files.length)return;
+  AIS.file=files.length===1&&fileKind(files[0])==='img'?files[0]:null;AIS.rot=0;
   $('#scanPick').hidden=true;$('#scanBusy').hidden=false;$('#scanRes').hidden=true;
   const bar=$('#scanBar'),msg=$('#scanMsg'),N=files.length;scanCur.n=N;bar.style.width='3%';
   const all={rows:[],totals:[],judul:'',gagal:[]};let netErr=false;
@@ -1393,7 +1398,9 @@ $('#scanFile').onchange=async e=>{
     }catch(er){if(er&&er.message==='net')netErr=true;all.gagal.push(k+1);all.totals.push({foto:k+1,nama:f.name,total:0})}
     bar.style.width=(5+(k+1)/N*95)+'%';
   }
-  if(!all.rows.length){toast(netErr?'Butuh internet buat baca file pertama kali':'Nggak nemu baris invoice di file itu');scanReset();return}
+  if(!all.rows.length){
+    if(AIS.file&&abReady()&&navigator.onLine){toast('Pembaca biasa gagal — dicoba pakai AI…');return aiScan()}
+    toast(netErr?'Butuh internet buat baca file pertama kali':'Nggak nemu baris invoice di file itu');scanReset();return}
   showScanRes(all);
 };
 function showScanRes(r){
@@ -1407,7 +1414,7 @@ function showScanRes(r){
   $('#dlPihak2').innerHTML=[...new Set(S.items.map(i=>i.pihak))].map(n=>`<option value="${esc(n)}">`).join('');
   $('#sJudul').innerHTML=r.judul?`<span style="font-size:12px;color:var(--mute)">Judul di foto:</span> <button class="chip" id="sUseJ">${esc(r.judul.slice(0,40))}</button>`:'';
   const u=$('#sUseJ');if(u)u.onclick=()=>{$('#sPihak').value=r.judul};
-  $('#scanBusy').hidden=true;$('#scanRes').hidden=false;syncScanLabels();drawRows();jtModeUI();
+  $('#scanBusy').hidden=true;$('#scanRes').hidden=false;$('#sAIBox').hidden=!(AIS.file&&abReady());syncScanLabels();drawRows();jtModeUI();
 }
 function syncScanLabels(){$('#sPihakL').textContent=SC.tipe==='hutang'?(SC.kat==='pribadi'?'Hutang ke siapa':'Nama supplier (dari siapa tagihan ini)'):'Nama pelanggan'}
 segBind('sTipe','v',v=>{SC.tipe=v;syncScanLabels()});segBind('sKat','v',v=>{SC.kat=v;syncScanLabels()});
@@ -1538,6 +1545,46 @@ $('#syOut').onclick=()=>{const k='syout';if(delArm!==k){delArm=k;toast('Tekan Pu
 window.addEventListener('online',()=>syncNow());
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow()});
 setInterval(()=>{if(!document.hidden)syncNow()},30000);
+
+/* ===== Baca nota pakai AI (Kantor AB AI) ===== */
+const AIS={file:null,rot:0};
+const abReady=()=>!!(typeof AB!=='undefined'&&AB.url&&AB.tok);
+function aiImage(file,rot){return new Promise((ok,no)=>{const url=URL.createObjectURL(file),i=new Image();
+  i.onload=()=>{let w=i.naturalWidth,h=i.naturalHeight;const sc=Math.min(1,1600/Math.max(w,h));w=Math.round(w*sc);h=Math.round(h*sc);
+    const c=document.createElement('canvas'),q=rot%180!==0;c.width=q?h:w;c.height=q?w:h;const x=c.getContext('2d');
+    x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(rot*Math.PI/180);x.drawImage(i,-w/2,-h/2,w,h);
+    URL.revokeObjectURL(url);ok(c.toDataURL('image/jpeg',0.85))};
+  i.onerror=()=>{URL.revokeObjectURL(url);no(new Error('Foto nggak bisa dibuka'))};i.src=url})}
+async function aiScan(){
+  if(!AIS.file)return;
+  if(!abReady())return toast('Sambungkan dulu ke Kantor AB AI di menu Atur');
+  if(!navigator.onLine)return toast('Baca pakai AI butuh internet');
+  $('#scanPick').hidden=true;$('#scanRes').hidden=true;$('#scanBusy').hidden=false;$('#scanImg').hidden=false;
+  $('#scanCount').textContent='🤖 Dibaca AI'+(AIS.rot?` (diputar ${AIS.rot}°)`:'');$('#scanBar').style.width='15%';
+  const msg=$('#scanMsg');msg.textContent='Menyiapkan foto…';
+  let t0=Date.now(),tick=setInterval(()=>{const d=Math.round((Date.now()-t0)/1000);msg.textContent=`AI lagi baca nota… ${d} detik`;$('#scanBar').style.width=Math.min(92,15+d*4)+'%'},1000);
+  try{
+    const image=await aiImage(AIS.file,AIS.rot);$('#scanImg').src=image;
+    const r=await fetch(AB.url+'/api/ocr/nota',{method:'POST',headers:{authorization:'Bearer '+AB.tok,'content-type':'application/json'},body:JSON.stringify({image})});
+    let j={};try{j=await r.json()}catch(e){}
+    if(!r.ok)throw new Error(r.status===401?'Token Kantor AB AI salah (cek di Atur)':(j.error||('HTTP '+r.status)));
+    if(!j.total){throw new Error('Total nggak kebaca. '+(j.catatan||'Coba putar foto / foto ulang lebih dekat.'))}
+    const rinc=(j.baris||[]).map(b=>`${b.nama}${b.qty!=null?` ${fmt(b.qty)}${b.satuan?' '+b.satuan:''}`:''}${b.subtotal!=null?' = '+fmt(b.subtotal):''}`).join(', ');
+    const msgChk=j.cocok?`🤖 ${(j.baris||[]).length} barang · hitungan cocok (dicek otomatis)`:'🤖 ⚠️ Cek lagi: '+(j.peringatan||[]).slice(0,3).join(' · ');
+    showScanRes({rows:[{tgl:j.tanggal||today(),no:j.no_nota||'',nominal:j.total,ket:'',on:true,foto:1,single:true,jt:j.jatuh_tempo||'',paid:j.sudah_dibayar||0,pihak:j.supplier||'',rincian:rinc}],
+      totals:[{foto:1,nama:AIS.file.name,total:j.total,single:true,no:j.no_nota||'',check:{ok:!!j.cocok,msg:msgChk+(j.catatan?' · Catatan AI: '+esc(j.catatan):'')}}],judul:'',gagal:[]});
+    SC.jtMode=j.jatuh_tempo?'doc':'up';applyJtMode();drawRows();jtModeUI();
+  }catch(e){
+    toast('AI gagal: '+(e.message==='Failed to fetch'?'nggak bisa nyambung ke Kantor AB AI':e.message));
+    $('#scanBusy').hidden=true;$('#scanRes').hidden=false;
+    SC={rows:[],totals:[{foto:1,nama:AIS.file.name,total:0}],gagal:[1],judul:'',tipe:'hutang',kat:'bisnis',hari:30,jtMode:'up'};drawRows();$('#sAIBox').hidden=false;
+  }finally{clearInterval(tick)}
+}
+$('#scanAI').onclick=()=>{if(!abReady())return toast('Sambungkan dulu ke Kantor AB AI di menu Atur');$('#scanFileAI').click()};
+$('#scanFileAI').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;AIS.file=f;AIS.rot=0;aiScan()};
+$('#sAIRe').onclick=()=>aiScan();
+$('#sAIRot').onclick=()=>{AIS.rot=(AIS.rot+90)%360;aiScan()};
+function aiTipUI(){const ok=abReady();$('#scanAI').disabled=false;$('#scanAITip').innerHTML=ok?'Pakai AI di Kantor AB AI: lebih jago baca nota kusut / tulisan tangan / struk pudar. Butuh internet, ±15 detik per foto. <b>Foto nyamping? Nanti bisa diputar.</b>':'Biar bisa baca pakai AI, sambungkan dulu di <b>Atur → Sambung ke Kantor AB AI</b>.'}
 
 /* ===== Sambung ke Kantor AB AI (kirim saja, tidak membaca) ===== */
 const ABK=KEY+'_abai';let AB=(()=>{try{return JSON.parse(localStorage.getItem(ABK)||'{}')}catch(e){return{}}})();
