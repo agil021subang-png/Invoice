@@ -542,7 +542,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.6 (baca nota pakai AI, sambung Kantor AB AI)';
+const APP_VER='4.7 (baca nota AI: putar otomatis, cek tanggal)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -1557,25 +1557,41 @@ function aiImage(file,rot){return new Promise((ok,no)=>{const url=URL.createObje
     x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(rot*Math.PI/180);x.drawImage(i,-w/2,-h/2,w,h);
     URL.revokeObjectURL(url);ok(c.toDataURL('image/jpeg',0.85))};
   i.onerror=()=>{URL.revokeObjectURL(url);no(new Error('Foto nggak bisa dibuka'))};i.src=url})}
-async function aiScan(){
+async function aiCall(rot){
+  const image=await aiImage(AIS.file,rot);$('#scanImg').src=image;
+  const r=await fetch(AB.url+'/api/ocr/nota',{method:'POST',headers:{authorization:'Bearer '+AB.tok,'content-type':'application/json'},body:JSON.stringify({image})});
+  let j={};try{j=await r.json()}catch(e){}
+  if(!r.ok){const er=new Error(r.status===401?'Token Kantor AB AI salah (cek di Atur)':(j.error||('HTTP '+r.status)));er.fatal=r.status===401||r.status===429;throw er}
+  j.rot=rot;return j;
+}
+const aiSkor=j=>(j.total?0:100)+(j.cocok?0:10)+(j.peringatan||[]).length;
+// auto=true: kalau hasil belum cocok, otomatis coba foto diputar 90° lalu 270°, ambil yang terbaik.
+async function aiScan(auto=true){
   if(!AIS.file)return;
   if(!abReady())return toast('Sambungkan dulu ke Kantor AB AI di menu Atur');
   if(!navigator.onLine)return toast('Baca pakai AI butuh internet');
-  $('#scanPick').hidden=true;$('#scanRes').hidden=true;$('#scanBusy').hidden=false;$('#scanImg').hidden=false;
-  $('#scanCount').textContent='🤖 Dibaca AI'+(AIS.rot?` (diputar ${AIS.rot}°)`:'');$('#scanBar').style.width='15%';
-  const msg=$('#scanMsg');msg.textContent='Menyiapkan foto…';
-  let t0=Date.now(),tick=setInterval(()=>{const d=Math.round((Date.now()-t0)/1000);msg.textContent=`AI lagi baca nota… ${d} detik`;$('#scanBar').style.width=Math.min(92,15+d*4)+'%'},1000);
+  $('#scanPick').hidden=true;$('#scanRes').hidden=true;$('#scanBusy').hidden=false;$('#scanImg').hidden=false;$('#scanBar').style.width='10%';
+  const msg=$('#scanMsg');let label='AI lagi baca nota…',t0=Date.now();
+  const tick=setInterval(()=>{const d=Math.round((Date.now()-t0)/1000);msg.textContent=`${label} ${d} detik`;$('#scanBar').style.width=Math.min(95,10+d*1.5)+'%'},1000);
+  const urut=auto?[AIS.rot,(AIS.rot+90)%360,(AIS.rot+270)%360]:[AIS.rot];
+  let best=null,lastErr=null;
   try{
-    const image=await aiImage(AIS.file,AIS.rot);$('#scanImg').src=image;
-    const r=await fetch(AB.url+'/api/ocr/nota',{method:'POST',headers:{authorization:'Bearer '+AB.tok,'content-type':'application/json'},body:JSON.stringify({image})});
-    let j={};try{j=await r.json()}catch(e){}
-    if(!r.ok)throw new Error(r.status===401?'Token Kantor AB AI salah (cek di Atur)':(j.error||('HTTP '+r.status)));
-    if(!j.total){throw new Error('Total nggak kebaca. '+(j.catatan||'Coba putar foto / foto ulang lebih dekat.'))}
+    for(let k=0;k<urut.length;k++){
+      $('#scanCount').textContent='🤖 Dibaca AI'+(urut[k]?` · foto diputar ${urut[k]}°`:'')+(k?` (percobaan ${k+1}/3)`:'');
+      if(k)label='Hasil belum cocok, coba putar foto…';
+      try{const j=await aiCall(urut[k]);if(!best||aiSkor(j)<aiSkor(best))best=j;if(j.cocok&&j.total)break}
+      catch(e){lastErr=e;if(e.fatal)break}
+    }
+    if(!best||!best.total)throw lastErr||new Error('Total nggak kebaca. '+((best&&best.catatan)||'Coba foto ulang lebih dekat & terang.'));
+    AIS.rot=best.rot;const j=best;$('#scanCount').textContent='🤖 Dibaca AI'+(j.rot?` · foto diputar ${j.rot}°`:'');
     const rinc=(j.baris||[]).map(b=>`${b.nama}${b.qty!=null?` ${fmt(b.qty)}${b.satuan?' '+b.satuan:''}`:''}${b.subtotal!=null?' = '+fmt(b.subtotal):''}`).join(', ');
-    const msgChk=j.cocok?`🤖 ${(j.baris||[]).length} barang · hitungan cocok (dicek otomatis)`:'🤖 ⚠️ Cek lagi: '+(j.peringatan||[]).slice(0,3).join(' · ');
+    const kecil=(j.cek_rincian||[]).length?` · ℹ️ ${(j.cek_rincian||[]).length} baris rincian barang mungkin salah baca jumlahnya (total aman)`:'';
+    const sup=j.supplier_kosong?' · Nama supplier nggak tertulis di nota, isi sendiri':'';
+    const msgChk=j.cocok?`🤖 ✅ Total cocok sama jumlah ${(j.baris||[]).length} barang, tanggal masuk akal (dicek otomatis)${kecil}${sup}`
+      :'🤖 ⚠️ HASIL AI BELUM BISA DIPERCAYA — cek SEMUA isian (no. nota, tanggal, jatuh tempo, total) sama nota aslinya: '+(j.peringatan||[]).slice(0,4).join(' · ')+sup;
     showScanRes({rows:[{tgl:j.tanggal||today(),no:j.no_nota||'',nominal:j.total,ket:'',on:true,foto:1,single:true,jt:j.jatuh_tempo||'',paid:j.sudah_dibayar||0,pihak:j.supplier||'',rincian:rinc}],
       totals:[{foto:1,nama:AIS.file.name,total:j.total,single:true,no:j.no_nota||'',check:{ok:!!j.cocok,msg:msgChk+(j.catatan?' · Catatan AI: '+esc(j.catatan):'')}}],judul:'',gagal:[]});
-    SC.jtMode=j.jatuh_tempo?'doc':'up';applyJtMode();drawRows();jtModeUI();
+    if(!j.supplier)$('#sPihak').value='';
   }catch(e){
     toast('AI gagal: '+(e.message==='Failed to fetch'?'nggak bisa nyambung ke Kantor AB AI':e.message));
     $('#scanBusy').hidden=true;$('#scanRes').hidden=false;
@@ -1584,9 +1600,9 @@ async function aiScan(){
 }
 $('#scanAI').onclick=()=>{if(!abReady())return toast('Sambungkan dulu ke Kantor AB AI di menu Atur');$('#scanFileAI').click()};
 $('#scanFileAI').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;AIS.file=f;AIS.rot=0;aiScan()};
-$('#sAIRe').onclick=()=>aiScan();
-$('#sAIRot').onclick=()=>{AIS.rot=(AIS.rot+90)%360;aiScan()};
-function aiTipUI(){const ok=abReady();$('#scanAI').disabled=false;$('#scanAITip').innerHTML=ok?'Pakai AI di Kantor AB AI: lebih jago baca nota kusut / tulisan tangan / struk pudar. Butuh internet, ±15 detik per foto. <b>Foto nyamping? Nanti bisa diputar.</b>':'Biar bisa baca pakai AI, sambungkan dulu di <b>Atur → Sambung ke Kantor AB AI</b>.'}
+$('#sAIRe').onclick=()=>aiScan(false);
+$('#sAIRot').onclick=()=>{AIS.rot=(AIS.rot+90)%360;aiScan(false)};
+function aiTipUI(){const ok=abReady();$('#scanAI').disabled=false;$('#scanAITip').innerHTML=ok?'Pakai AI di Kantor AB AI: lebih jago baca nota kusut / tulisan tangan / struk pudar. Butuh internet, ±15 detik per foto (sampai ±1 menit kalau fotonya nyamping — dicoba putar otomatis).':'Biar bisa baca pakai AI, sambungkan dulu di <b>Atur → Sambung ke Kantor AB AI</b>.'}
 
 /* ===== Sambung ke Kantor AB AI (kirim saja, tidak membaca) ===== */
 const ABK=KEY+'_abai';let AB=(()=>{try{return JSON.parse(localStorage.getItem(ABK)||'{}')}catch(e){return{}}})();
