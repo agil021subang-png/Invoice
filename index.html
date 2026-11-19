@@ -329,6 +329,15 @@ nav button{min-width:0}
         <div class="tip">Perubahan dikirim otomatis. Kalau offline, disimpan dulu lalu dikirim begitu ada sinyal.</div>
       </div>
     </div>
+    <div class="sec">Sambung ke Kantor AB AI</div>
+    <div class="dcard" id="abCard">
+      <div class="tip" style="margin-top:0">Kirim ringkasan hutang supplier & invoice ke Kantor AB AI, biar tim AI bisa jawab "hutang ke supplier berapa?". Yang dikirim cuma nama, nomor nota, tanggal, jatuh tempo & jumlah. Nomor WA dan rincian barang <b>tidak</b> dikirim.</div>
+      <label>Alamat API</label><input class="f" id="abUrl" placeholder="https://ab-ai-worker.xxx.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label>Token aplikasi</label><input class="f" id="abTok" type="password" placeholder="token khusus aplikasi (bukan token admin)" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="kv"><span>Status</span><b id="abStat">Belum disambung</b></div>
+      <div class="btns"><button class="btn" id="abSave">Simpan & kirim</button><button class="btn d" id="abOff">Putuskan</button></div>
+      <div class="tip">Setelah disambung, perubahan dikirim otomatis beberapa detik setelah disimpan.</div>
+    </div>
     <div class="sec">Kunci apk</div>
     <div class="dcard">
       <div class="kv"><span>Status</span><b id="lkStat"></b></div>
@@ -590,7 +599,7 @@ function seedLog(){if(S.logSeeded)return;const L=[];
 function mergeLog(remote){if(!Array.isArray(remote))return false;const have=new Set((S.log||[]).map(l=>l.k));let add=0;remote.forEach(l=>{if(l&&l.k&&!have.has(l.k)){S.log.push(l);add++}});
   if(add){S.log.sort((a,b)=>b.t-a.t);S.log=S.log.slice(0,800)}const rk=new Set(remote.map(l=>l&&l.k));return(S.log||[]).some(l=>!rk.has(l.k))}
 function saveRaw(){try{localStorage.setItem(KEY,JSON.stringify(S));return true}catch(e){toast('⚠️ GAGAL MENYIMPAN — ekspor backup sekarang!');return false}}
-function save(){trackChanges();const r=saveRaw();if(typeof scheduleSync==='function')scheduleSync();return r}
+function save(){trackChanges();const r=saveRaw();if(typeof scheduleSync==='function')scheduleSync();if(typeof abSchedule==='function')abSchedule();return r}
 let persistAsked=false;function askPersist(){if(persistAsked)return;persistAsked=true;try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{})}catch(e){}}
 
 /* ===== Utils ===== */
@@ -1529,6 +1538,36 @@ $('#syOut').onclick=()=>{const k='syout';if(delArm!==k){delArm=k;toast('Tekan Pu
 window.addEventListener('online',()=>syncNow());
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow()});
 setInterval(()=>{if(!document.hidden)syncNow()},30000);
+
+/* ===== Sambung ke Kantor AB AI (kirim saja, tidak membaca) ===== */
+const ABK=KEY+'_abai';let AB=(()=>{try{return JSON.parse(localStorage.getItem(ABK)||'{}')}catch(e){return{}}})();
+const abSave_=()=>{try{localStorage.setItem(ABK,JSON.stringify(AB))}catch(e){}};
+const abPayload=()=>S.items.map(i=>({id:i.id,tipe:i.tipe,kat:i.kat,pihak:i.pihak,no_nota:i.noInv||'',kategori:i.kategori||'',tgl:i.tgl,jt:i.jt||'',total:Math.round(total(i)),dibayar:Math.round(dibayar(i))}));
+const abHash=t=>{let h=0;for(let k=0;k<t.length;k++)h=(h*31+t.charCodeAt(k))|0;return String(h)};
+function abStat(){const el=$('#abStat');if(!el)return;el.textContent=!AB.url?'Belum disambung':AB.err?('⚠️ '+AB.err):AB.at?('✓ Terkirim '+new Date(AB.at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})):'Menunggu kirim'}
+let abT=null,abBusy=false;
+function abSchedule(){if(!AB.url||!AB.tok)return;clearTimeout(abT);abT=setTimeout(()=>abSend(false),4000)}
+async function abSend(force){
+  if(!AB.url||!AB.tok||abBusy||!navigator.onLine)return;
+  const items=abPayload(),body=JSON.stringify({items,sumber:'AB Wangi Tagihan'}),h=abHash(body);
+  if(!force&&h===AB.hash)return;
+  abBusy=true;
+  try{const r=await fetch(AB.url+'/api/tagihan/sync',{method:'POST',headers:{authorization:'Bearer '+AB.tok,'content-type':'application/json'},body});
+    let j={};try{j=await r.json()}catch(e){}
+    if(!r.ok)throw new Error(r.status===401?'Token salah':r.status===403?'Token ini tidak diizinkan':(j.error||('HTTP '+r.status)));
+    AB.hash=h;AB.at=Date.now();AB.err='';abSave_();abStat();if(force)toast('Terkirim ke Kantor AB AI ✓ ('+j.diterima+' tagihan)')}
+  catch(e){AB.err=e.message==='Failed to fetch'?'Nggak bisa nyambung (cek alamat)':e.message;abSave_();abStat();if(force)toast('Gagal kirim: '+AB.err)}
+  finally{abBusy=false}
+}
+$('#abUrl').value=AB.url||'https://ab-ai-worker.agil021subang.workers.dev';abStat();
+$('#abSave').onclick=()=>{const url=$('#abUrl').value.trim().replace(/\/+$/,''),tok=$('#abTok').value.trim();
+  if(!/^https:\/\/[^/]+$/.test(url))return toast('Alamat harus diawali https:// tanpa / di belakang');
+  if(tok.length<24&&!AB.tok)return toast('Token minimal 24 karakter');
+  AB.url=url;if(tok)AB.tok=tok;AB.hash='';AB.err='';abSave_();$('#abTok').value='';abStat();abSend(true)};
+$('#abOff').onclick=()=>{AB={};abSave_();$('#abTok').value='';abStat();toast('Sambungan ke Kantor AB AI diputus')};
+window.addEventListener('online',()=>abSend(false));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)abSend(false)});
+setTimeout(()=>abSend(false),3000);
 
 document.addEventListener('gesturestart',e=>e.preventDefault());
 
