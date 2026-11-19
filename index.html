@@ -542,7 +542,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.7 (baca nota AI: putar otomatis, cek tanggal)';
+const APP_VER='4.8 (update otomatis)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -1711,6 +1711,24 @@ if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
   navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{});
   const hadCtrl=!!navigator.serviceWorker.controller;let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadCtrl||reloaded)return;if($('#ovForm').classList.contains('on'))saveDraft(true);reloaded=true;location.reload()});
 }
+/* Update otomatis: cek versi baru tiap 2 menit & saat apk dibuka lagi. Kalau lagi nggak ngisi apa-apa,
+   langsung dimuat ulang; kalau lagi ngisi form/scan, muncul tombol & dimuat ulang setelah ditutup. */
+let updVer=null;
+function updIdle(){return !document.querySelector('.ov.on')&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))}
+function updApply(){try{sessionStorage.setItem('abw_upd',updVer)}catch(e){}location.reload()}
+async function updCheck(){
+  if(document.hidden||!navigator.onLine||!location.protocol.startsWith('http'))return;
+  try{
+    if(!updVer){const t=await (await fetch('./index.html?cek='+Date.now(),{cache:'no-store'})).text();const m=/const APP_VER='([^']+)'/.exec(t);if(!m||m[1]===APP_VER)return;updVer=m[1]}
+    if(updIdle())return updApply();
+    let b=$('#updBar');if(!b){b=document.createElement('button');b.id='updBar';b.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:99;padding:12px;border:0;border-radius:12px;background:#12393d;color:#fff;font-weight:700;font-size:15px;box-shadow:0 6px 20px rgba(0,0,0,.25)';b.onclick=()=>{if($('#ovForm').classList.contains('on'))saveDraft(true);updApply()};document.body.appendChild(b)}
+    b.textContent='🔄 Versi baru '+updVer.split(' ')[0]+' siap — ketuk buat perbarui';
+  }catch(e){}
+}
+setInterval(updCheck,120000);setTimeout(updCheck,5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(updCheck,1500)});
+document.addEventListener('click',()=>{if(updVer)setTimeout(updCheck,800)},true);
+try{const v=sessionStorage.getItem('abw_upd');if(v){sessionStorage.removeItem('abw_upd');setTimeout(()=>toast('✅ Apk diperbarui ke versi '+APP_VER.split(' ')[0]),600)}}catch(e){}
 </script>
 <script>
 /* iOS PWA: navbar bawah kadang nyangkut di tengah layar (setelah keyboard/scroll) -> paksa posisi ulang */
