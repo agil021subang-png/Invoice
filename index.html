@@ -542,7 +542,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='4.4 (hutang: per supplier + per nota)';
+const APP_VER='4.6 (baca nota pakai AI, sambung Kantor AB AI)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -629,7 +629,9 @@ const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','De
 const tglId=s=>{if(!s)return'-';const[y,m,d]=s.split('-');return +d+' '+BLN[+m-1]+' '+y};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 load();memoInit();
-function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2000)}
+function toast(t,ms){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),ms||2000)}
+const IS_DESK=!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&!(navigator.maxTouchPoints>1&&/Mac/.test(navigator.userAgent))&&matchMedia('(pointer:fine)').matches;
+async function copyTxt(t){if(!t)return false;try{await navigator.clipboard.writeText(t);return true}catch(e){try{const ta=document.createElement('textarea');ta.value=t;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');ta.remove();return ok}catch(e2){return false}}}
 
 /* ===== Nama pihak: samakan dengan yang sudah ada ===== */
 const nkey=s=>String(s||'').toLowerCase().replace(/\b(cv|pt|ud|tb|pd|toko)\b\.?/g,'').replace(/[^a-z0-9]/g,'');
@@ -1087,13 +1089,13 @@ async function docToJpeg(doc){
   return await new Promise(r=>out.toBlob(r,'image/jpeg',0.92));
 }
 async function shareDoc(make,name,text,fmt){
-  if(!fmt)return;const img=fmt==='img';toast(img?'Membuat gambar…':'Membuat PDF…');
+  if(!fmt)return;const img=fmt==='img';const copied=IS_DESK?await copyTxt(text):false;toast(img?'Membuat gambar…':'Membuat PDF…');
   let doc;try{doc=await make(img?{img:true}:{});if(doc.doc)doc=doc.doc}catch(e){return toast(e&&e.message==='net'?'Butuh internet sekali buat bikin '+(img?'gambar':'PDF')+' pertama':'Gagal bikin '+(img?'gambar':'PDF'))}
   let file;try{file=img?new File([await docToJpeg(doc)],name.replace(/\.pdf$/i,'.jpg'),{type:'image/jpeg'}):new File([doc.output('blob')],name,{type:'application/pdf'})}catch(e){return toast(e&&e.message==='net'?'Butuh internet sekali dulu':'Gagal bikin gambar')}
-  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],text});return}}catch(e){if(e&&e.name==='AbortError')return}
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],text});if(IS_DESK)toast(copied?'Pesan udah disalin — di WA tekan Ctrl+V di kolom keterangan':'Pesan nggak bisa disalin otomatis',6000);return}}catch(e){if(e&&e.name==='AbortError')return}
   const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();
-  if(navigator.clipboard&&text){try{await navigator.clipboard.writeText(text)}catch(e){}}
-  toast((img?'Gambar':'PDF')+' diunduh — pesan WA udah disalin, tinggal tempel');
+  const ok=copied||await copyTxt(text);
+  toast((img?'Gambar':'PDF')+' diunduh'+(ok?' — pesan udah disalin, di WA tekan Ctrl+V':''),6000);
 }
 async function sharePdf(make,name,text){return shareDoc(make,name,text,await askFmt('Kirim sebagai'))}
 async function savePdf(make,name){const fmt=await askFmt('Simpan sebagai');if(!fmt)return;
