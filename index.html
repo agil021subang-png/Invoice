@@ -542,7 +542,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='5.0 (nama baru: KO AI)';
+const APP_VER='5.1 (nota: koreksi angka otomatis)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -1587,8 +1587,10 @@ async function aiScan(auto=true){
     const rinc=(j.baris||[]).map(b=>`${b.nama}${b.qty!=null?` ${fmt(b.qty)}${b.satuan?' '+b.satuan:''}`:''}${b.subtotal!=null?' = '+fmt(b.subtotal):''}`).join(', ');
     const kecil=(j.cek_rincian||[]).length?` · ℹ️ ${(j.cek_rincian||[]).length} baris rincian barang mungkin salah baca jumlahnya (total aman)`:'';
     const sup=j.supplier_kosong?' · Nama supplier nggak tertulis di nota, isi sendiri':'';
-    const msgChk=j.cocok?`🤖 ✅ Total cocok sama jumlah ${(j.baris||[]).length} barang, tanggal masuk akal (dicek otomatis)${kecil}${sup}`
-      :'🤖 ⚠️ HASIL AI BELUM BISA DIPERCAYA — cek SEMUA isian (no. nota, tanggal, jatuh tempo, total) sama nota aslinya: '+(j.peringatan||[]).slice(0,4).join(' · ')+sup;
+    // Koreksi otomatis dari server (angka 1 digit salah baca, nama supplier disamakan) — DITUNJUKKAN, bukan diam-diam.
+    const kor=(j.koreksi||[]).length?' · 🔧 Dibetulkan otomatis: '+(j.koreksi||[]).map(esc).join(' · '):'';
+    const msgChk=j.cocok?`🤖 ✅ Total cocok sama jumlah ${(j.baris||[]).length} barang, tanggal masuk akal (dicek otomatis)${kor}${kecil}${sup}`
+      :'🤖 ⚠️ HASIL AI BELUM BISA DIPERCAYA — cek SEMUA isian (no. nota, tanggal, jatuh tempo, total) sama nota aslinya: '+(j.peringatan||[]).slice(0,4).join(' · ')+kor+sup;
     showScanRes({rows:[{tgl:j.tanggal||today(),no:j.no_nota||'',nominal:j.total,ket:'',on:true,foto:1,single:true,jt:j.jatuh_tempo||'',paid:j.sudah_dibayar||0,pihak:j.supplier||'',rincian:rinc}],
       totals:[{foto:1,nama:AIS.file.name,total:j.total,single:true,no:j.no_nota||'',check:{ok:!!j.cocok,msg:msgChk+(j.catatan?' · Catatan AI: '+esc(j.catatan):'')}}],judul:'',gagal:[]});
     if(!j.supplier)$('#sPihak').value='';
