@@ -542,7 +542,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='5.1 (nota: koreksi angka otomatis)';
+const APP_VER='5.2 (nota: 2 AI saling cek + wajib konfirmasi total)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -1447,11 +1447,13 @@ function updScanSum(){
     return Math.abs(cur-t.total)<0.01?{ok:true,t:`${pre}${n} baris · ${rp(cur)} ✅ cocok TOTAL`}:{ok:false,t:`${pre}${n} baris · ${rp(cur)} ⚠️ TOTAL di foto ${rp(t.total)}, selisih ${rp(Math.abs(t.total-cur))}`};
   });
   const allOk=lines.length&&lines.every(l=>l.ok);
-  $('#scanCheck').innerHTML=`<div class="chk ${allOk?'ok':'no'}">${lines.map(l=>l.t).join('<br>')}</div>`;
+  const butuhK=SC.totals.some(t=>t.ai);
+  $('#scanCheck').innerHTML=`<div class="chk ${allOk?'ok':'no'}">${lines.map(l=>l.t).join('<br>')}</div>`+(butuhK?`<label class="chk" style="display:flex;gap:10px;align-items:flex-start;margin-top:8px;cursor:pointer"><input type="checkbox" id="sKonf" ${SC.konf?'checked':''} style="width:22px;height:22px;flex:none"><span><b>Total ${rp(sum)} udah gw samain sama nota asli</b><br><span style="font-size:12px">Wajib dicentang buat hasil baca AI. Kalau beda, betulin angkanya dulu.</span></span></label>`:'');
+  const kf=$('#sKonf');if(kf)kf.onchange=()=>{SC.konf=kf.checked};
   $('#sSave').textContent=`Simpan ${on.length} catatan (${rp(sum)})`;
 }
 $('#sRows').addEventListener('input',e=>{const t=e.target,i=+t.dataset.i,k=t.dataset.k;if(k===undefined)return;const x=SC.rows[i];
-  if(k==='on'){x.on=t.checked;t.closest('.srow').classList.toggle('off',!x.on)}else if(k==='jt'){x.jt=t.value;x.jtEdit=true}else if(k==='nominal'){liveMoney(t);x.nominal=r2(parseAmt(t.value))}else x[k]=t.value;updScanSum()});
+  if(k==='on'){x.on=t.checked;t.closest('.srow').classList.toggle('off',!x.on)}else if(k==='jt'){x.jt=t.value;x.jtEdit=true}else if(k==='nominal'){liveMoney(t);x.nominal=r2(parseAmt(t.value));SC.konf=false}else x[k]=t.value;updScanSum()});
 $('#sRows').addEventListener('focusout',e=>{const t=e.target;if(t.dataset.k==='nominal'){const x=SC.rows[+t.dataset.i];t.value=x.nominal?fmt(x.nominal):''}});
 $('#sRows').addEventListener('click',e=>{const r=e.target.dataset.rm;if(r!==undefined){SC.rows.splice(+r,1);drawRows()}});
 $('#sAdd').onclick=()=>{SC.rows.push({tgl:today(),no:'',nominal:0,ket:'',on:true,foto:0});drawRows()};
@@ -1460,6 +1462,7 @@ $('#sSave').onclick=()=>{
   const on=SC.rows.filter(x=>x.on);if(!on.length)return toast('Nggak ada baris yang dicentang');
   if(on.some(x=>!(x.pihak||'').trim()&&!pihak))return toast('Isi nama '+(SC.tipe==='hutang'?'supplier':'pelanggan')+' dulu');
   if(on.some(x=>!x.nominal||!x.tgl))return toast('Ada baris yang nominal/tanggalnya kosong');
+  if(SC.totals.some(t=>t.ai)&&!SC.konf){toast('Centang dulu: total udah disamain sama nota');$('#sKonf')?.scrollIntoView({block:'center'});return}
   let n=0;
   on.forEach(x=>{const ph=canonName((x.pihak||'').trim()||pihak);S.items.push({id:uid(),dibuat:Date.now()+n++,tipe:SC.tipe,kat:SC.kat,pihak:ph,wa:'',tgl:x.tgl,jt:x.jt||defJt(today()),mode:'nominal',baris:[{nama:'',qty:1,harga:0}],nominal:r2(x.nominal),noInv:x.no||(SC.tipe==='piutang'?nextInv():''),catatan:'',kategori:(x.ket||'').trim().toUpperCase(),rincianTxt:x.rincian||'',bayar:x.paid>0?[{tgl:x.tgl,jumlah:Math.min(r2(x.paid),r2(x.nominal)),ket:'terbayar di nota'}]:[]})});
   const cp=canonName(pihak),ex=S.items.find(i=>i.pihak===cp&&i.wa);if(ex)S.items.forEach(i=>{if(i.pihak===cp&&!i.wa)i.wa=ex.wa});
@@ -1589,10 +1592,11 @@ async function aiScan(auto=true){
     const sup=j.supplier_kosong?' · Nama supplier nggak tertulis di nota, isi sendiri':'';
     // Koreksi otomatis dari server (angka 1 digit salah baca, nama supplier disamakan) — DITUNJUKKAN, bukan diam-diam.
     const kor=(j.koreksi||[]).length?' · 🔧 Dibetulkan otomatis: '+(j.koreksi||[]).map(esc).join(' · '):'';
-    const msgChk=j.cocok?`🤖 ✅ Total cocok sama jumlah ${(j.baris||[]).length} barang, tanggal masuk akal (dicek otomatis)${kor}${kecil}${sup}`
+    // JUJUR: "cocok" cuma artinya 2 AI sepakat & hitungannya nyambung — AI tetap bisa salah baca. Agil wajib lihat total di nota.
+    const msgChk=j.cocok?`🤖 2 AI sepakat total ${rp(j.total)} (${(j.baris||[]).length} barang). AI tetap bisa salah — samain dulu sama angka TOTAL di nota${kor}${kecil}${sup}`
       :'🤖 ⚠️ HASIL AI BELUM BISA DIPERCAYA — cek SEMUA isian (no. nota, tanggal, jatuh tempo, total) sama nota aslinya: '+(j.peringatan||[]).slice(0,4).join(' · ')+kor+sup;
     showScanRes({rows:[{tgl:j.tanggal||today(),no:j.no_nota||'',nominal:j.total,ket:'',on:true,foto:1,single:true,jt:j.jatuh_tempo||'',paid:j.sudah_dibayar||0,pihak:j.supplier||'',rincian:rinc}],
-      totals:[{foto:1,nama:AIS.file.name,total:j.total,single:true,no:j.no_nota||'',check:{ok:!!j.cocok,msg:msgChk+(j.catatan?' · Catatan AI: '+esc(j.catatan):'')}}],judul:'',gagal:[]});
+      totals:[{foto:1,nama:AIS.file.name,total:j.total,single:true,ai:true,no:j.no_nota||'',check:{ok:!!j.cocok,msg:msgChk+(j.catatan?' · Catatan AI: '+esc(j.catatan):'')}}],judul:'',gagal:[]});
     if(!j.supplier)$('#sPihak').value='';
   }catch(e){
     toast('AI gagal: '+(e.message==='Failed to fetch'?'nggak bisa nyambung ke KO AI':e.message));
