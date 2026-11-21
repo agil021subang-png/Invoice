@@ -226,6 +226,8 @@ nav button{min-width:0}
   <div class="dots" id="lkDots"></div>
   <div class="kp" id="lkPad"></div>
   <button class="lk2" id="lkBio" hidden>Pakai Face ID / sidik jari</button>
+  <button class="lk2" id="lkKetik" style="color:rgba(255,255,255,.85);font-weight:600">⌨️ Ketik pakai keyboard HP</button>
+  <input id="lkIn" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Ketik PIN" style="position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px;caret-color:transparent">
   <button class="lk2" id="lkForgot" style="color:rgba(255,255,255,.7);font-weight:600">Lupa PIN?</button>
 </div>
 <header class="hdr">
@@ -343,7 +345,7 @@ nav button{min-width:0}
       <div class="kv"><span>Status</span><b id="lkStat"></b></div>
       <div id="lkOpts">
         <label>Kunci otomatis kalau ditinggal</label>
-        <select class="f" id="lkDelay"><option value="0">Langsung</option><option value="60">1 menit</option><option value="300">5 menit</option><option value="900">15 menit</option></select>
+        <select class="f" id="lkDelay"><option value="0">Langsung</option><option value="60">1 menit</option><option value="300">5 menit</option><option value="900">15 menit</option><option value="1800">30 menit</option></select>
         <button class="btn o" id="lkBioSet" hidden style="margin-top:10px">Aktifkan Face ID / sidik jari</button>
       </div>
       <div class="btns"><button class="btn o" id="lkSet">Pasang PIN</button><button class="btn d" id="lkOff">Matikan PIN</button></div>
@@ -542,7 +544,7 @@ nav button{min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VER='5.2 (nota: 2 AI saling cek + wajib konfirmasi total)';
+const APP_VER='5.3 (PIN bisa diketik pakai keyboard HP)';
 /* ===== Storage ===== */
 const KEY='abw_tagihan_v1';
 const DEF={items:[],drafts:[],seq:{},dismiss:{},cfg:{nama:'Albarokah Wangi',alamat:'',wa:'',bayar:'',hari:3,jtDef:'1m'}};
@@ -1661,7 +1663,7 @@ let lkQ=Promise.resolve();
 $('#lkPad').innerHTML=[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')+`<button class="t" data-k="x" id="lkCancel">Batal</button><button data-k="0">0</button><button class="t del" data-k="b" aria-label="Hapus">⌫</button>`;
 function showLock(mode,title,msg){lkMode=mode;lkBuf='';$('#lkTitle').textContent=title;$('#lkMsg').textContent=msg||'';$('#lkCancel').style.visibility=mode==='unlock'?'hidden':'visible';
   $('#lkForgot').hidden=mode!=='unlock';$('#lkBio').hidden=!(mode==='unlock'&&LK.cred);document.body.classList.add('locked');lkDraw()}
-function hideLock(){document.body.classList.remove('locked');lkBuf=''}
+function hideLock(){document.body.classList.remove('locked');lkBuf='';$('#lkIn').blur()}
 function lkShake(msg){$('#lkMsg').textContent=msg;const d=$('#lkDots');d.classList.remove('shake');void d.offsetWidth;d.classList.add('shake');lkBuf='';setTimeout(lkDraw,350)}
 async function lkInput(k){
   if(k==='x'){hideLock();if(lkResolve){lkResolve(null);lkResolve=null}return}
@@ -1685,7 +1687,12 @@ $('#lkPad').addEventListener('click',e=>e.preventDefault());
 // tombol ✓ buat mode pasang PIN: pakai tombol ⌫ panjang? lebih jelas: ganti "Batal" jadi ✓ saat ada isi
 const _draw=lkDraw;lkDraw=function(){_draw();const c=$('#lkCancel');if(lkMode==='set1'||lkMode==='set2'){c.textContent=lkBuf.length>=4?'✓ OK':'Batal';c.dataset.k=lkBuf.length>=4?'ok':'x';c.classList.toggle('ok',lkBuf.length>=4)}else{c.textContent='Batal';c.dataset.k='x';c.classList.remove('ok')}};
 const _inp=lkInput;lkInput=function(k){lkQ=lkQ.then(()=>k==='ok'?lkNext():_inp(k)).catch(()=>{});return lkQ};
-document.addEventListener('keydown',e=>{if(!document.body.classList.contains('locked'))return;if(/^\d$/.test(e.key))lkInput(e.key);else if(e.key==='Backspace')lkInput('b');else if(e.key==='Enter'&&(lkMode==='set1'||lkMode==='set2'))lkNext()});
+// Keyboard HP (iPhone/Android): input angka tersembunyi; tiap angka diteruskan ke PIN. Enter = OK saat pasang PIN.
+const lkFokus=()=>{const i=$('#lkIn');i.focus();i.click()};
+$('#lkKetik').onclick=lkFokus;$('#lkDots').addEventListener('click',lkFokus);
+$('#lkIn').addEventListener('input',e=>{const d=e.target.value.replace(/\D/g,'');e.target.value='';for(const c of d)lkInput(c)});
+$('#lkIn').addEventListener('keydown',e=>{if(e.key==='Backspace'){e.preventDefault();lkInput('b')}else if(e.key==='Enter'&&(lkMode==='set1'||lkMode==='set2')){e.preventDefault();lkInput('ok')}});
+document.addEventListener('keydown',e=>{if(!document.body.classList.contains('locked')||e.target.id==='lkIn')return;if(/^\d$/.test(e.key))lkInput(e.key);else if(e.key==='Backspace')lkInput('b');else if(e.key==='Enter'&&(lkMode==='set1'||lkMode==='set2'))lkNext()});
 function askPin(){return new Promise(r=>{lkResolve=r;showLock('verify','Masukkan PIN lama','')})}
 function afterUnlock(){render();setTimeout(()=>showNotif(false),300);if(SY.refresh)syncNow()}
 // Face ID / sidik jari (WebAuthn, cuma buat buka kunci di perangkat ini)
